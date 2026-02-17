@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-// ❌ 删除这一行： import BuyMeCoffee from "@/components/BuyMeCoffee"; 
+// 👇 1. 引入组件
+import NoticeModal from "./components/NoticeModal";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -14,8 +15,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Lecturer Review App",
-  description: "Review your university lecturers and avoid killer subjects.",
+  title: "Course Review (Private)",
+  description: "Private tool for course planning.",
 };
 
 export default function RootLayout({
@@ -30,7 +31,8 @@ export default function RootLayout({
       >
         {children}
         
-        {/* ❌ 删除这一行： <BuyMeCoffee /> */}
+        {/* 👇 2. 把弹窗放在这里 */}
+        <NoticeModal />
         
       </body>
     </html>
