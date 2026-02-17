@@ -1,10 +1,13 @@
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
+// 👇 1. 引入刚才写的 Request 组件
+import RequestModal from "@/app/components/RequestModal";
 
 export default function SubjectSelection() {
   const params = useParams();
   const router = useRouter();
+  // 这里的 subjectCode 就是 URL 里的 "SEMM1203"
   const subjectCode = params.code ? decodeURIComponent(params.code as string) : "Unknown";
 
   return (
@@ -43,7 +46,7 @@ export default function SubjectSelection() {
           <span className="text-gray-300 text-xl group-hover:text-blue-500 transition-colors">➔</span>
         </button>
 
-        {/* 2. 跳转到课程详情 (About Course) - 已激活！ */}
+        {/* 2. 跳转到课程详情 (About Course) */}
         <button 
           onClick={() => router.push(`/subject/${subjectCode}/course`)}
           className="w-full bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between hover:shadow-md hover:border-green-200 transition-all group"
@@ -61,6 +64,14 @@ export default function SubjectSelection() {
         </button>
 
       </div>
+
+      {/* 👇 2. 在这里加入 Request Modal */}
+      {/* 这里的 type="lecturer" 意思是：在这个页面，主要的缺失请求通常是请求加“老师” */}
+      {/* 我们把 subjectCode 传进去，这样请求里就会自动带上 "SEMM1203" */}
+      <div className="mt-8">
+        <RequestModal type="lecturer" subjectCode={subjectCode} />
+      </div>
+
     </div>
   );
 }
