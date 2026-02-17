@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import BuyMeCoffee from "./components/BuyMeCoffee"; // 👈 引入刚才写的组件
+// ❌ 删除这一行： import BuyMeCoffee from "@/components/BuyMeCoffee"; 
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Lecturer Review App", // 我顺便帮你把标题改得更好听了一点
+  title: "Lecturer Review App",
   description: "Review your university lecturers and avoid killer subjects.",
 };
 
@@ -30,8 +30,7 @@ export default function RootLayout({
       >
         {children}
         
-        {/* 👇 把按钮放在这里，它就会在所有页面出现 */}
-        <BuyMeCoffee />
+        {/* ❌ 删除这一行： <BuyMeCoffee /> */}
         
       </body>
     </html>
