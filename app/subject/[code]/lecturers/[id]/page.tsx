@@ -208,7 +208,7 @@ export default function ReviewPage() {
         ) : (
           <div className="bg-indigo-50 p-5 rounded-2xl border border-indigo-100 shadow-sm relative">
             <h3 className="text-indigo-800 font-bold text-sm mb-2">✨ AI Summary</h3>
-            <p className="text-gray-700 text-sm leading-relaxed">{summary}</p>
+            <p className="text-gray-700 text-sm leading-relaxed whitespace-pre-wrap">{summary}</p>
             {/* 这里的 Close 按钮现在是‘强制重新生成’的意思，或者你可以选择隐藏它 */}
             <div className="mt-3 flex gap-4 text-xs">
                 <span className="text-gray-400 italic">Saved from last analysis</span>
@@ -250,7 +250,7 @@ export default function ReviewPage() {
                   {[1, 2, 3, 4, 5].map((star) => <StarIcon key={star} filled={star <= review.rating} size={14} />)}
                 </div>
               </div>
-              <p className="text-gray-600 text-sm">{review.comment}</p>
+              <p className="text-gray-600 text-sm whitespace-pre-wrap">{review.comment}</p>
               <p className="text-xs text-gray-300 mt-2 text-right">{new Date(review.created_at).toLocaleDateString()}</p>
             </div>
           ))}
