@@ -12,7 +12,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "服务器缺少 API Key，请检查 Vercel 设置" }, { status: 500 });
     }
 
-    const modelName = "gemini-1.5-flash"; 
+    const modelName = "gemini-1.5-flash-latest";
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
     
     console.log(`🚀 正在连接 Google (${modelName})...`);
