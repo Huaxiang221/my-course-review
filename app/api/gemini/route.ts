@@ -5,7 +5,7 @@ export async function POST(request: Request) {
     const { reviewsText } = await request.json();
 
     // 👇 确保这里是你的新 API Key
-    const apiKey = "AIzaSyBS5gAUd0G8sVp1YovjEPHMeS9XqfW9BnI"; 
+    const apiKey = process.env.GEMINI_API_KEY; 
 
     if (!apiKey || apiKey.includes("...")) {
       return NextResponse.json({ error: "请填入正确的 API Key" }, { status: 500 });

@@ -7,7 +7,7 @@ export async function getGeminiSummary(reviewsText: string) {
 
   // ⚠️⚠️⚠️ 调试专用：如果环境变量读不到，请把你的 Key 临时粘贴在下面引号里
   // 如果 .env.local 没生效，这里会作为备用
-  const HARDCODED_KEY = "AIzaSyBls2EgLe6MdHzmtHuVL7BIAzeKnVR3nBc"; // <--- 把 Key 贴在这里试试！例如 "AIzaSy..."
+  const HARDCODED_KEY = process.env.GEMINI_API_KEY; // <--- 把 Key 贴在这里试试！例如 "AIzaSy..."
   
   if (!apiKey && HARDCODED_KEY) {
     apiKey = HARDCODED_KEY;
