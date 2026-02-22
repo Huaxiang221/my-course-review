@@ -23,7 +23,23 @@ export async function POST(request: Request) {
       body: JSON.stringify({
         contents: [{
           parts: [{
-            text: `Summarize these lecturer reviews in 3 short sentences: ${reviewsText}`
+            // 👇 强力三语魔法指令就在这里！
+            text: `You are a helpful university assistant. 
+            Read the following lecturer reviews and provide a concise summary.
+            
+            ⚠️ CRITICAL INSTRUCTION: You MUST output the summary in EXACTLY THREE languages. Do NOT give me only one language. Follow this EXACT format with the emojis:
+            
+            🇬🇧 **English Summary:**
+            (Summarize the reviews here in 2-3 sentences)
+            
+            🇲🇾 **Ringkasan Bahasa Melayu:**
+            (Summarize the reviews here in 2-3 sentences)
+            
+            🇨🇳 **中文总结:**
+            (Summarize the reviews here in 2-3 sentences)
+            
+            Here are the reviews:
+            ${reviewsText}`
           }]
         }]
       }),
