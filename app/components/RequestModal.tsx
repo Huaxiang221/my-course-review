@@ -1,96 +1,170 @@
 "use client";
 
 import { useState } from "react";
-import { supabase } from "@/utils/supabase";
+import { createClient } from "@supabase/supabase-js";
 
-// 👇 1. 定义 props 类型：多加一个 optional 的 subjectCode
-type RequestModalProps = {
-  type: "lecturer" | "subject";
-  subjectCode?: string; // 问号表示这个并不是必须的 (因为请求加科目时可能没有)
-};
+// 初始化 Supabase
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const supabase = createClient(supabaseUrl, supabaseKey);
 
-export default function RequestModal({ type, subjectCode }: RequestModalProps) {
+// 接收来自 page.tsx 传过来的 type 和 subjectCode
+export default function RequestModal({ type, subjectCode }: { type: string, subjectCode: string }) {
   const [isOpen, setIsOpen] = useState(false);
-  const [name, setName] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [success, setSuccess] = useState(false);
 
-  async function handleSubmit() {
-    if (!name.trim()) return alert("Please fill in the name!");
-    
+  // 表单状态 (Form States)
+  const [name, setName] = useState("");
+  const [gender, setGender] = useState("");
+  const [office, setOffice] = useState("");
+  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
+
+  const handleSubmit = async () => {
+    if (!name.trim()) return;
     setIsSubmitting(true);
-    
-    // 👇 2. 发送数据时，把 related_code 也带上
-    const { error } = await supabase.from("requests").insert([
-      { 
-        type, 
-        name, 
-        status: "pending",
-        related_code: subjectCode || null // 如果有 code 就存，没有就是 null
-      }
+
+    // 将数据存入 Supabase 的 lecturer_requests 表
+    const { error } = await supabase.from("lecturer_requests").insert([
+      {
+        course_code: subjectCode, // 使用传进来的 subjectCode (例如 SEMM1203)
+        name: name.trim(),
+        gender: gender || null, // 如果没填，就存为 null
+        office: office.trim() || null,
+        phone_number: phone.trim() || null,
+        email: email.trim() || null,
+      },
     ]);
 
-    if (error) {
-      alert("Error: " + error.message);
+    if (!error) {
+      setSuccess(true);
+      setTimeout(() => {
+        setIsOpen(false);
+        setSuccess(false);
+        // 清空表单
+        setName("");
+        setGender("");
+        setOffice("");
+        setPhone("");
+        setEmail("");
+      }, 2000);
     } else {
-      alert("Request sent! We will add it soon. 🚀");
-      setName("");
-      setIsOpen(false);
+      alert("Failed to submit request. Please try again.");
+      console.error(error);
     }
-    
     setIsSubmitting(false);
-  }
+  };
 
   return (
-    <>
-      <div className="mt-8 text-center pb-10">
-        <p className="text-gray-400 text-sm mb-2">
-          Can't find the {type}?
-        </p>
-        <button 
-          onClick={() => setIsOpen(true)}
-          className="text-blue-600 font-bold hover:underline text-sm"
-        >
-          + Request to add {type}
-        </button>
-      </div>
+    <div className="text-center">
+      <p className="text-sm text-gray-400 mb-2">Can't find the lecturer?</p>
+      <button
+        onClick={() => setIsOpen(true)}
+        className="text-blue-600 font-bold hover:underline transition-all"
+      >
+        + Request to add lecturer
+      </button>
 
+      {/* 弹窗 (Modal) */}
       {isOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-xl animate-in fade-in zoom-in duration-200">
-            <h3 className="text-lg font-bold text-gray-900 mb-2">Request to Add</h3>
-            <p className="text-sm text-gray-500 mb-4">
-              {/* 👇 3. 提示语变得更智能了 */}
-              {subjectCode 
-                ? `Enter the missing lecturer's name for ${subjectCode}:` 
-                : `Enter the missing ${type}'s name/code:`}
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl w-full max-w-md p-6 relative text-left shadow-2xl">
+            
+            {/* 关闭按钮 */}
+            <button
+              onClick={() => setIsOpen(false)}
+              className="absolute top-4 right-4 text-gray-400 hover:text-black w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors"
+            >
+              ✕
+            </button>
+            
+            <h3 className="text-xl font-bold mb-1">Request New Lecturer</h3>
+            <p className="text-xs text-gray-500 mb-5">
+              Adding details helps me update the database faster! (Only name is required)
             </p>
 
-            <input
-              type="text"
-              className="w-full border border-gray-300 rounded-xl p-3 mb-4 focus:ring-2 focus:ring-blue-500 outline-none"
-              placeholder={`E.g. ${type === "lecturer" ? "Dr. Strange" : "SEMM 9999"}`}
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
+            {success ? (
+              <div className="bg-green-50 text-green-600 p-4 rounded-xl text-center font-bold text-sm">
+                Request sent successfully! I will add them soon.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {/* Name - 必填 */}
+                <div>
+                  <label className="text-xs font-bold text-gray-700 ml-1">Lecturer Name *</label>
+                  <input
+                    type="text"
+                    required
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="e.g. Dr. Ali bin Abu"
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
 
-            <div className="flex gap-2">
-              <button 
-                onClick={() => setIsOpen(false)}
-                className="flex-1 py-2.5 bg-gray-100 text-gray-700 font-bold rounded-xl hover:bg-gray-200"
-              >
-                Cancel
-              </button>
-              <button 
-                onClick={handleSubmit}
-                disabled={isSubmitting}
-                className="flex-1 py-2.5 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 disabled:opacity-50"
-              >
-                {isSubmitting ? "Submit" : "Send"}
-              </button>
-            </div>
+                {/* Gender - 选填 */}
+                <div>
+                  <label className="text-xs font-bold text-gray-700 ml-1">Gender (Optional)</label>
+                  <select
+                    value={gender}
+                    onChange={(e) => setGender(e.target.value)}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">Select Gender...</option>
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                  </select>
+                </div>
+
+                {/* Office - 选填 */}
+                <div>
+                  <label className="text-xs font-bold text-gray-700 ml-1">Office Room (Optional)</label>
+                  <input
+                    type="text"
+                    value={office}
+                    onChange={(e) => setOffice(e.target.value)}
+                    placeholder="e.g. C23-314"
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                {/* Phone & Email - 并排以节省空间 */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-bold text-gray-700 ml-1">Phone (Optional)</label>
+                    <input
+                      type="tel"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      placeholder="e.g. 012-3456789"
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-gray-700 ml-1">Email (Optional)</label>
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="e.g. ali@utm.my"
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+
+                <button
+                  onClick={handleSubmit}
+                  disabled={isSubmitting || !name.trim()}
+                  className="w-full mt-2 bg-blue-600 text-white font-bold py-3 rounded-xl hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                >
+                  {isSubmitting ? "Submitting..." : "Submit Request"}
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
-    </>
+    </div>
   );
 }
