@@ -1,26 +1,14 @@
-// 文件路径: app/actions.ts
 "use server";
 
 export async function getGeminiSummary(reviewsText: string) {
-  // 1. 优先尝试读取环境变量
-  let apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
-
-  // ⚠️⚠️⚠️ 调试专用：如果环境变量读不到，请把你的 Key 临时粘贴在下面引号里
-  // 如果 .env.local 没生效，这里会作为备用
-  const HARDCODED_KEY = process.env.GEMINI_API_KEY; // <--- 把 Key 贴在这里试试！例如 "AIzaSy..."
-  
-  if (!apiKey && HARDCODED_KEY) {
-    apiKey = HARDCODED_KEY;
-    console.log("Using Hardcoded Key for debugging...");
-  }
+  // 🌟 同样，只保留最纯粹的环境变量读取方式，去掉容易引发 Bug 的备用逻辑
+  const apiKey = process.env.GEMINI_API_KEY;
 
   if (!apiKey) {
-    console.error("❌ No API Key found.");
-    return { success: false, error: "Missing API Key." };
+    console.error("❌ No API Key found in Vercel.");
+    return { success: false, error: "服务器缺少 API Key" };
   }
 
-  // 2. 使用最底层的 fetch 请求 (绕过 SDK 问题)
-  // 我们使用目前最通用的 gemini-1.5-flash
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
   const payload = {
@@ -48,7 +36,6 @@ export async function getGeminiSummary(reviewsText: string) {
 
     const data = await response.json();
 
-    // 3. 检查 Google 返回的具体错误
     if (!response.ok) {
       console.error("❌ Google API Error:", JSON.stringify(data, null, 2));
       return { 
@@ -57,7 +44,6 @@ export async function getGeminiSummary(reviewsText: string) {
       };
     }
 
-    // 4. 提取结果
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
     
     if (!text) {

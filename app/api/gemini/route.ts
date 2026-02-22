@@ -4,17 +4,15 @@ export async function POST(request: Request) {
   try {
     const { reviewsText } = await request.json();
 
-    // 👇 确保这里是你的新 API Key
+    // 🌟 只需要这干净利落的一行，直接读取服务器环境变量
     const apiKey = process.env.GEMINI_API_KEY; 
 
-    if (!apiKey || apiKey.includes("...")) {
-      return NextResponse.json({ error: "请填入正确的 API Key" }, { status: 500 });
+    if (!apiKey) {
+      console.error("❌ API Key is missing in Vercel Environment Variables!");
+      return NextResponse.json({ error: "服务器缺少 API Key，请检查 Vercel 设置" }, { status: 500 });
     }
 
-    // 🌟 核心修改：使用 "gemini-flash-latest"
-    // 这是一个通用别名，专门指向当前账号可用的最新免费 Flash 模型，不会有配额问题。
-    const modelName = "gemini-flash-latest"; 
-    
+    const modelName = "gemini-1.5-flash"; 
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
     
     console.log(`🚀 正在连接 Google (${modelName})...`);
