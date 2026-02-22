@@ -4,7 +4,7 @@ export const config = {
   matcher: ["/", "/subject/:path*"], // 锁住首页和所有详情页
 };
 
-export function middleware(req: NextRequest) {
+export function proxy(req: NextRequest) {
   const basicAuth = req.headers.get("authorization");
   const url = req.nextUrl;
 
