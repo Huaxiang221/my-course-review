@@ -26,7 +26,7 @@ export default function RequestModal({ type, subjectCode }: { type: string, subj
     setIsSubmitting(true);
 
     // 将数据存入 Supabase 的 lecturer_requests 表
-    const { error } = await supabase.from("lecturer_requests").insert([
+    const { error } = await supabase.from("requests").insert([
       {
         course_code: subjectCode, // 使用传进来的 subjectCode (例如 SEMM1203)
         name: name.trim(),
