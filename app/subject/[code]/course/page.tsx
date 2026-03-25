@@ -170,7 +170,7 @@ export default function CourseReviewPage() {
                 <span key={s}>{s <= Math.round(Number(averageRating)) ? "★" : "☆"}</span>
               ))}
             </div>
-            <p className="text-xs text-gray-400">{reviews.length} Student Reviews</p>
+            <p className="text-xs text-gray-400 whitespace-pre-wrap">{reviews.length} Student Reviews</p>
           </div>
         </div>
 
@@ -221,7 +221,7 @@ export default function CourseReviewPage() {
           <div className="bg-indigo-50 p-5 rounded-2xl border border-indigo-100 shadow-sm relative">
             <div className="absolute top-4 right-4 text-xs bg-white px-2 py-1 rounded-full text-indigo-400 border border-indigo-100">AI Generated</div>
             <h3 className="text-indigo-800 font-bold text-sm mb-2">✨ Course Summary</h3>
-            <p className="text-gray-700 text-sm leading-relaxed">{summary}</p>
+            <p className="text-gray-700 text-sm leading-relaxed whitespace-pre-wrap">{summary}</p>
           </div>
         )}
       </div>
@@ -251,7 +251,7 @@ export default function CourseReviewPage() {
       <div className="w-full max-w-md space-y-3">
         <h3 className="text-lg font-bold text-gray-700 px-2 flex justify-between items-center">
           Feedback 
-          <span className="text-sm font-normal text-gray-400">{reviews.length} reviews</span>
+          <span className="text-sm font-normal text-gray-400 whitespace-pre-wrap">{reviews.length} reviews</span>
         </h3>
         {reviews.length === 0 ? <p className="text-gray-400 text-center py-4">No reviews yet. Be the first!</p> : null}
         {reviews.map((review, i) => (
@@ -262,7 +262,7 @@ export default function CourseReviewPage() {
                 {[1, 2, 3, 4, 5].map((star) => <StarIcon key={star} filled={star <= review.rating} size={14} />)}
               </div>
             </div>
-            <p className="text-gray-600 text-sm">{review.comment}</p>
+            <p className="text-gray-600 text-sm whitespace-pre-wrap">{review.comment}</p>
           </div>
         ))}
       </div>
