@@ -10,8 +10,8 @@ type Lecturer = {
   id: number; 
   name: string; 
   subject_code: string;
-  image: string | null; // 新增
-  gender: string;       // 新增
+  image: string | null; 
+  gender: string;       
   reviews: Review[];
 };
 
@@ -23,6 +23,28 @@ export default function LecturerList() {
   
   const [lecturers, setLecturers] = useState<Lecturer[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // 👑 新增：记录当前访客是不是 VIP
+  const [isVIP, setIsVIP] = useState(false);
+
+  // 新增：专门用来检查 VIP 身份的 useEffect
+  useEffect(() => {
+    async function checkVIPStatus() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user && user.email) {
+        const { data } = await supabase
+          .from("vip_admins")
+          .select("email")
+          .eq("email", user.email)
+          .single();
+        
+        if (data) {
+          setIsVIP(true); // 是 VIP，放行！
+        }
+      }
+    }
+    checkVIPStatus();
+  }, []);
 
   useEffect(() => {
     async function fetchLecturersAndReviews() {
@@ -81,16 +103,24 @@ export default function LecturerList() {
                 
                 <div className="flex items-center gap-4 overflow-hidden">
                   {/* 👇👇👇 这里是核心修改：头像显示逻辑 👇👇👇 */}
-                  <div className="w-14 h-14 rounded-full overflow-hidden flex-shrink-0 border border-gray-100 bg-gray-50 shadow-sm">
-                    {lec.image ? (
-                      <img 
-                        src={lec.image} 
-                        alt={lec.name} 
-                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300" 
-                      />
+                  <div className="w-14 h-14 rounded-full overflow-hidden flex-shrink-0 border border-gray-100 bg-gray-50 shadow-sm relative">
+                    {isVIP ? (
+                      // 👑 VIP 视角：显示真实图片或性别头像
+                      lec.image ? (
+                        <img 
+                          src={lec.image} 
+                          alt={lec.name} 
+                          className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300" 
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-2xl bg-blue-50">
+                          {lec.gender === "Female" ? "👩‍🏫" : "👨‍🏫"}
+                        </div>
+                      )
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center text-2xl bg-blue-50">
-                        {lec.gender === "Female" ? "👩‍🏫" : "👨‍🏫"}
+                      // 🔒 普通人视角：只显示一把锁
+                      <div className="w-full h-full bg-gray-100 flex items-center justify-center text-gray-400">
+                        <span className="text-xl">🔒</span>
                       </div>
                     )}
                   </div>

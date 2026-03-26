@@ -1,20 +1,49 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
+import { supabase } from "@/utils/supabase";
 
 export default function NoticeModal() {
   const [isOpen, setIsOpen] = useState(false);
+  const pathname = usePathname();
 
   useEffect(() => {
-    // Check if the user has seen the notice in this session
-    const hasSeenNotice = sessionStorage.getItem("has_seen_notice");
-    if (!hasSeenNotice) {
-      setIsOpen(true);
+    // 1. 如果当前是在 /login 页面，绝对不弹窗
+    if (pathname === "/login") {
+      setIsOpen(false);
+      return;
     }
-  }, []);
+
+    async function checkStatusAndShow() {
+      // 2. 检查当前用户是不是 VIP
+      const { data: { user } } = await supabase.auth.getUser();
+      let isVIP = false;
+      
+      if (user && user.email) {
+        const { data } = await supabase
+          .from("vip_admins")
+          .select("email")
+          .eq("email", user.email)
+          .single();
+        
+        if (data) {
+          isVIP = true;
+        }
+      }
+
+      // 3. 如果不是 VIP，而且在这个 Session 还没看过，就弹窗
+      const hasSeenNotice = sessionStorage.getItem("has_seen_notice");
+      if (!isVIP && !hasSeenNotice) {
+        setIsOpen(true);
+      }
+    }
+
+    checkStatusAndShow();
+  }, [pathname]);
 
   const handleClose = () => {
-    // Mark as seen for this session
+    // 标记为已看，下次刷新不弹了
     sessionStorage.setItem("has_seen_notice", "true");
     setIsOpen(false);
   };
@@ -23,7 +52,7 @@ export default function NoticeModal() {
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-300">
-      <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-gray-200 relative animate-in zoom-in-95 duration-300">
+      <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-gray-200 relative animate-in zoom-in-95 duration-300 max-h-[90vh] overflow-y-auto">
         
         {/* Header */}
         <div className="text-center mb-5">
@@ -36,10 +65,16 @@ export default function NoticeModal() {
         {/* Content */}
         <div className="space-y-4 text-sm text-gray-700 leading-relaxed">
           
-          {/* Warning Box */}
+          {/* Warning Box 1: Privacy */}
           <div className="bg-red-50 border-l-4 border-red-500 p-3 rounded-r-lg">
             <p className="font-bold text-red-700 mb-1">🚫 Private Access Only</p>
             <p>Please <strong>DO NOT share the password</strong> with others. This is a private tool intended for internal use only.</p>
+          </div>
+
+          {/* ✨ 新增 Warning Box 2: Review Guidelines ✨ */}
+          <div className="bg-yellow-50 border-l-4 border-yellow-500 p-3 rounded-r-lg">
+            <p className="font-bold text-yellow-700 mb-1">✍️ Review Guidelines</p>
+            <p>Please keep your reviews constructive. <strong>Aggressive, offensive, or extreme comments</strong> are not allowed and will be <strong>deleted by the Admin</strong> without prior notice.</p>
           </div>
 
           <p>
