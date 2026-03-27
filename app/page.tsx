@@ -17,45 +17,52 @@ const years = [1, 2, 3, 4];
 export default function Home() {
   const router = useRouter();
   
-  // 👇 1. 新增：开局默认开启“幕布”，先不给看页面，等安保查完岗再说
   const [isAuthenticating, setIsAuthenticating] = useState(true);
-  
-  const [selectedYear, setSelectedYear] = useState(2);
+  const [selectedYear, setSelectedYear] = useState(1);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // 👇 ==========================================
+  // 🧠 新增 1：恢复记忆！页面刚加载时，去看看之前存了哪个年份
+  // ==============================================
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const savedYear = sessionStorage.getItem("saved_year");
+      if (savedYear) {
+        setSelectedYear(Number(savedYear));
+      }
+    }
+  }, []);
+  // 👆 ==========================================
+
 
   // 👇 ==========================================
   // 🚨 终极安保系统：静默拦截非 VIP + 完美擦除网址
   // ==============================================
   useEffect(() => {
     const checkVipAndCleanUrl = async () => {
-      // 只有网址带 access_token (刚从 Google 跳回来) 才需要严格查岗
       if (typeof window !== "undefined" && window.location.hash.includes("access_token")) {
         const { data: { session } } = await supabase.auth.getSession();
 
         if (session) {
           const userEmail = session.user.email;
 
-          // 去数据库查岗：这个 Google 邮箱在不在 VIP 名单里？
           const { data: vipUser } = await supabase
-            .from("vip_admins") // 确保这里的表名和你的 Supabase 一致
+            .from("vip_admins") 
             .select("email")
             .eq("email", userEmail)
             .single();
 
           if (!vipUser) {
-            // 🛑 核心修改：查无此人，直接注销并静默踢回，不用 alert！
             await supabase.auth.signOut();
             router.replace("/login");
-            return; // ⚠️ 注意：这里直接 return，下面拉开幕布的代码不会执行，用户直接被踢走
+            return; 
           }
 
-          // 👑 如果是真正的 VIP 本人，执行终极“毁尸灭迹”
           window.history.replaceState(null, "", window.location.pathname);
         }
       }
       
-      // 查岗完毕没有问题（或者是普通学生用密码进来的），拉开幕布放行！
       setIsAuthenticating(false);
     };
 
@@ -64,7 +71,7 @@ export default function Home() {
   // 👆 ==========================================
 
 
-  // 获取科目数据的代码保持不变
+  // 获取科目数据的代码
   useEffect(() => {
     async function fetchSubjects() {
       setLoading(true);
@@ -82,14 +89,13 @@ export default function Home() {
       setLoading(false);
     }
 
-    // 只有当身份验证通过，拉开了幕布之后，才去请求科目数据（节省数据库资源）
     if (!isAuthenticating) {
       fetchSubjects();
     }
   }, [selectedYear, isAuthenticating]);
 
 
-  // 👇 核心拦截：如果还在查岗，直接给个全屏 Loading，绝不显示主页代码！
+  // 核心拦截：如果还在查岗，直接给个全屏 Loading
   if (isAuthenticating) {
     return (
       <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center">
@@ -99,7 +105,7 @@ export default function Home() {
     );
   }
 
-  // 👇 下面才是验证通过后，真实展示的页面
+  // 验证通过后，真实展示的页面
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col items-center p-6">
       
@@ -111,7 +117,14 @@ export default function Home() {
         {years.map((year) => (
           <button
             key={year}
-            onClick={() => setSelectedYear(year)}
+            // 👇 新增 2：点击年份时，不仅切换页面，还悄悄把年份写进小纸条
+            onClick={() => {
+              setSelectedYear(year);
+              if (typeof window !== "undefined") {
+                sessionStorage.setItem("saved_year", year.toString());
+              }
+            }}
+            // 👆 ==========================================
             className={`px-6 py-2 rounded-full text-sm font-bold transition-all ${
               selectedYear === year
                 ? "bg-blue-600 text-white shadow-md scale-105"
