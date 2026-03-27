@@ -3,31 +3,75 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/utils/supabase";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
-// 定义一下科目的形状 (TypeScript)
 type Subject = {
   id: number;
   code: string;
   name: string;
-  year: number; // 👈 改成了 number 类型，因为数据库里存的是数字
+  year: number;
 };
 
-// 👇 这里的年份直接用数字，方便循环
 const years = [1, 2, 3, 4];
 
 export default function Home() {
-  const [selectedYear, setSelectedYear] = useState(2); // 默认选中 Year 2 (随你喜欢)
+  const router = useRouter();
+  
+  // 👇 1. 新增：开局默认开启“幕布”，先不给看页面，等安保查完岗再说
+  const [isAuthenticating, setIsAuthenticating] = useState(true);
+  
+  const [selectedYear, setSelectedYear] = useState(2);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // 👇 ==========================================
+  // 🚨 终极安保系统：静默拦截非 VIP + 完美擦除网址
+  // ==============================================
+  useEffect(() => {
+    const checkVipAndCleanUrl = async () => {
+      // 只有网址带 access_token (刚从 Google 跳回来) 才需要严格查岗
+      if (typeof window !== "undefined" && window.location.hash.includes("access_token")) {
+        const { data: { session } } = await supabase.auth.getSession();
+
+        if (session) {
+          const userEmail = session.user.email;
+
+          // 去数据库查岗：这个 Google 邮箱在不在 VIP 名单里？
+          const { data: vipUser } = await supabase
+            .from("vip_admins") // 确保这里的表名和你的 Supabase 一致
+            .select("email")
+            .eq("email", userEmail)
+            .single();
+
+          if (!vipUser) {
+            // 🛑 核心修改：查无此人，直接注销并静默踢回，不用 alert！
+            await supabase.auth.signOut();
+            router.replace("/login");
+            return; // ⚠️ 注意：这里直接 return，下面拉开幕布的代码不会执行，用户直接被踢走
+          }
+
+          // 👑 如果是真正的 VIP 本人，执行终极“毁尸灭迹”
+          window.history.replaceState(null, "", window.location.pathname);
+        }
+      }
+      
+      // 查岗完毕没有问题（或者是普通学生用密码进来的），拉开幕布放行！
+      setIsAuthenticating(false);
+    };
+
+    checkVipAndCleanUrl();
+  }, [router]);
+  // 👆 ==========================================
+
+
+  // 获取科目数据的代码保持不变
   useEffect(() => {
     async function fetchSubjects() {
       setLoading(true);
-      
       const { data, error } = await supabase
         .from("subjects")
         .select("*")
-        .eq("year", selectedYear); // 这里会自动匹配数字类型的 year
+        .eq("year", selectedYear);
 
       if (error) {
         console.error("Error fetching subjects:", error);
@@ -38,16 +82,31 @@ export default function Home() {
       setLoading(false);
     }
 
-    fetchSubjects();
-  }, [selectedYear]);
+    // 只有当身份验证通过，拉开了幕布之后，才去请求科目数据（节省数据库资源）
+    if (!isAuthenticating) {
+      fetchSubjects();
+    }
+  }, [selectedYear, isAuthenticating]);
 
+
+  // 👇 核心拦截：如果还在查岗，直接给个全屏 Loading，绝不显示主页代码！
+  if (isAuthenticating) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center">
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600 mb-4"></div>
+        <p className="text-gray-400 text-sm font-medium animate-pulse">Checking access...</p>
+      </div>
+    );
+  }
+
+  // 👇 下面才是验证通过后，真实展示的页面
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col items-center p-6">
       
       <h1 className="text-3xl font-bold text-blue-700 mb-2 mt-8">Uni Course Review 🎓</h1>
       <p className="text-gray-500 mb-8 text-sm">Real data from Supabase!</p>
 
-      {/* Year Selector (已更新 Year 4) */}
+      {/* Year Selector */}
       <div className="bg-white p-1.5 rounded-full shadow-sm mb-8 flex gap-1 border border-gray-100">
         {years.map((year) => (
           <button

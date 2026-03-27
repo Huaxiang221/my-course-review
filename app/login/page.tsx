@@ -40,7 +40,7 @@ export default function LoginPage() {
   // 处理普通学生输入密码
   const handleStandardLogin = () => {
     if (password === "utm2026") { 
-      document.cookie = "standard_access=true; path=/; max-age=" + 60 * 60 * 24 * 7;
+      document.cookie = "standard_access=true; path=/;" ;
       router.push("/"); 
       router.refresh();
     } else {
