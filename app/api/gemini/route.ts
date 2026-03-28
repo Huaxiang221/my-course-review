@@ -2,9 +2,9 @@ import { NextResponse } from "next/server";
 
 export async function POST(request: Request) {
   try {
-    const { reviewsText } = await request.json();
+    // 🌟 1. 接收前端传来的四个核心参数
+    const { reviewsText, averageRating, reviewCount, courseCode } = await request.json();
 
-    // 🌟 只需要这干净利落的一行，直接读取服务器环境变量
     const apiKey = process.env.GEMINI_API_KEY; 
 
     if (!apiKey) {
@@ -12,7 +12,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "服务器缺少 API Key，请检查 Vercel 设置" }, { status: 500 });
     }
 
-    const modelName = "gemini-flash-latest";
+    const modelName = "gemini-flash-latest"; // 使用最新的 flash 模型
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
     
     console.log(`🚀 正在连接 Google (${modelName})...`);
@@ -23,25 +23,32 @@ export async function POST(request: Request) {
       body: JSON.stringify({
         contents: [{
           parts: [{
-            // 👇 强力三语魔法指令就在这里！
-            text: `You are a helpful university assistant. 
-            Read the following lecturer reviews and provide a concise summary.
+            // 👇 2. 强力 JSON & 完美开头指令
+            text: `You are a helpful academic assistant summarizing student reviews for a university course (${courseCode}). 
+            Here are the reviews: "${reviewsText}"
+
+            Based on the reviews, provide a brief, objective summary of the course.
             
-            ⚠️ CRITICAL INSTRUCTION: You MUST output the summary in EXACTLY THREE languages. Do NOT give me only one language. Follow this EXACT format with the emojis:
+            ⚠️ CRITICAL INSTRUCTION 1: You MUST start the summary for EACH language with the translated version of this exact sentence:
+            - For English: "Based on ${reviewCount} student reviews, ${courseCode} holds an average rating of ${averageRating}/5.0."
+            - For Bahasa Melayu: "Berdasarkan ${reviewCount} ulasan pelajar, ${courseCode} mencatatkan purata rating ${averageRating}/5.0."
+            - For Chinese: "综合 ${reviewCount} 条学生评价，${courseCode} 的平均得分为 ${averageRating}/5.0。"
+            Then continue with the rest of the summary in that specific language.
+
+            ⚠️ CRITICAL INSTRUCTION 2: You MUST return the output strictly in the following JSON format ONLY. 
+            Do NOT include any markdown formatting like \`\`\`json. Just the raw JSON object.
             
-            🇬🇧 **English Summary:**
-            (Summarize the reviews here in 2-3 sentences)
-            
-            🇲🇾 **Ringkasan Bahasa Melayu:**
-            (Summarize the reviews here in 2-3 sentences)
-            
-            🇨🇳 **中文总结:**
-            (Summarize the reviews here in 2-3 sentences)
-            
-            Here are the reviews:
-            ${reviewsText}`
+            {
+              "en": "[Insert English Summary here]",
+              "ms": "[Insert Bahasa Melayu Summary here]",
+              "zh": "[Insert Chinese Summary here]"
+            }`
           }]
-        }]
+        }],
+        // 🌟 3. 大厂级保险机制：强制 Gemini 的 API 只能返回 JSON 格式
+        generationConfig: {
+          responseMimeType: "application/json"
+        }
       }),
     });
 
@@ -52,6 +59,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: data.error?.message || "Model error" }, { status: response.status });
     }
 
+    // 提取 AI 返回的 JSON 字符串
     const summary = data.candidates?.[0]?.content?.parts?.[0]?.text;
     
     return NextResponse.json({ summary });
