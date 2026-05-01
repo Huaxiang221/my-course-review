@@ -1,9 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import NoticeModal from "./components/NoticeModal"; 
-// 👇 新增这一行，用相对路径 ./
-import ReportButton from "./components/ReportButton"; 
+import NoticeModal from "./components/NoticeModal";
+import ReportButton from "./components/FeedbackWidget"; // 👈 你的 Import
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -27,15 +26,13 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased relative`}
-      >
+      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+        {/* 这里是你网站主要的内容 */}
         {children}
         
+        {/* 👇 把你的两个全局组件放在 body 的最后面 */}
         <NoticeModal />
-        {/* 👇 把按钮组件放进来 */}
         <ReportButton />
-        
       </body>
     </html>
   );

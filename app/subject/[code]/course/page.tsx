@@ -17,13 +17,16 @@ type Course = {
 type Review = {
   id: number;
   student_name: string;
-  rating: number;
+  rating: number; // 数据库依然存为 rating，但前端展示为 difficulty
   comment: string;
   created_at: string;
 };
 
-// 图表配色
-const COLORS = ["#8B5CF6", "#3B82F6", "#10B981", "#FBBF24", "#F97316"];
+// 🎨 图表配色
+const COLORS = [
+  "#8B5CF6", "#3B82F6", "#10B981", "#FBBF24", "#F97316",
+  "#EC4899", "#14B8A6", "#84CC16", "#06B6D4", "#F43F5E" 
+];
 
 // 📖 书本图标
 function BookOpenIcon({ className = "w-6 h-6" }: { className?: string }) {
@@ -34,10 +37,10 @@ function BookOpenIcon({ className = "w-6 h-6" }: { className?: string }) {
   );
 }
 
-// 星星图标组件
+// 🌟 星星图标组件 (颜色改成了更偏向“难度/热度”的橘红色 #F97316)
 function StarIcon({ filled, size }: { filled: boolean; size: number }) {
   return (
-    <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill={filled ? "#FACC15" : "#E5E7EB"} style={{ minWidth: size }}>
+    <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill={filled ? "#F97316" : "#E5E7EB"} style={{ minWidth: size }} className="transition-colors duration-300">
       <path fillRule="evenodd" d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.007 5.404.433c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L12 18.354 7.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.433 2.082-5.006z" clipRule="evenodd" />
     </svg>
   );
@@ -61,7 +64,7 @@ export default function CourseReviewPage() {
 
   const [course, setCourse] = useState<Course | null>(null);
   const [reviews, setReviews] = useState<Review[]>([]);
-  const [rating, setRating] = useState(0);
+  const [rating, setRating] = useState(0); // 这个 state 现在代表难度 (Difficulty)
   const [comment, setComment] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [summary, setSummary] = useState("");
@@ -98,7 +101,7 @@ export default function CourseReviewPage() {
   }, [subjectCode]);
 
   async function handleSubmit() {
-    if (rating === 0) return alert("Please give a rating! ⭐");
+    if (rating === 0) return alert("Please rate the difficulty level! ⭐");
     setIsSubmitting(true);
 
     const { error } = await supabase.from("course_reviews").insert([{
@@ -171,7 +174,7 @@ export default function CourseReviewPage() {
 
       <motion.div variants={staggerContainer} initial="hidden" animate="show" className="w-full max-w-md space-y-6">
         
-        {/* 1. 课程核心信息 (新增 hover凸起效果) */}
+        {/* 1. 课程核心信息 */}
         <motion.div variants={fadeInUp} className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-gray-100 text-center relative overflow-hidden hover:-translate-y-1.5 hover:shadow-xl transition-all duration-300">
           <div className="absolute top-0 left-0 w-full h-2 bg-linear-to-r from-green-400 via-blue-500 to-indigo-500"></div>
           
@@ -193,17 +196,18 @@ export default function CourseReviewPage() {
                <p className="text-xs text-gray-400 font-medium mt-1.5">{reviews.length} Student Reviews</p>
             </div>
             <div className="flex flex-col items-center justify-center">
-              <div className="flex text-yellow-400 text-base gap-0.5 mb-1.5">
+              <div className="flex text-orange-400 text-base gap-0.5 mb-1.5">
                 {[1, 2, 3, 4, 5].map(s => <StarIcon key={s} filled={s <= Math.round(Number(averageRating))} size={18} />)}
               </div>
-              <span className="text-xs bg-yellow-100 text-yellow-800 font-bold px-3 py-1 rounded-full border border-yellow-200 shadow-sm">Overall Rating</span>
+              {/* 改成了 Overall Difficulty */}
+              <span className="text-xs bg-orange-50 text-orange-700 font-bold px-3 py-1 rounded-full border border-orange-200 shadow-sm">Overall Difficulty</span>
             </div>
           </div>
 
           <p className="text-sm text-gray-500 leading-relaxed px-2 whitespace-pre-line">{course.description || "No description provided."}</p>
         </motion.div>
 
-        {/* 2. Marks Distribution Chart (新增 hover凸起效果) */}
+        {/* 2. Marks Distribution Chart */}
         <motion.div variants={fadeInUp} className="bg-white p-6 rounded-4xl shadow-sm border border-gray-100 hover:-translate-y-1.5 hover:shadow-xl transition-all duration-300">
           <h3 className="text-xl font-extrabold text-gray-900 mb-1 text-center">Marks Distribution</h3>
           <p className="text-sm text-gray-400 text-center mb-5 font-medium">Weightage of assessments</p>
@@ -233,7 +237,6 @@ export default function CourseReviewPage() {
                 </ResponsiveContainer>
               </div>
 
-              {/* HTML Legend */}
               <div className="grid grid-cols-2 gap-x-6 gap-y-2 mt-4 px-4">
                 {course.marks_distribution.map((entry, index) => (
                   <div key={index} className="flex items-center gap-2.5">
@@ -251,7 +254,7 @@ export default function CourseReviewPage() {
           )}
         </motion.div>
 
-        {/* 3. AI Summary (新增 hover凸起效果) */}
+        {/* 3. AI Summary */}
         <motion.div variants={fadeInUp}>
           {!summary ? (
             <button onClick={generateSummary} disabled={isGenerating || reviews.length === 0} className="w-full bg-linear-to-r from-blue-600 to-indigo-600 text-white p-4 rounded-2xl font-bold shadow-[0_4px_14px_0_rgba(79,70,229,0.3)] hover:shadow-lg hover:-translate-y-1.5 disabled:opacity-50 disabled:hover:translate-y-0 transition-all flex justify-center items-center gap-2 text-sm duration-300">
@@ -306,9 +309,16 @@ export default function CourseReviewPage() {
           )}
         </motion.div>
 
-        {/* 4. Review Form (新增 hover凸起效果 + Title变大) */}
+        {/* 4. Review Form (强化了 Difficulty 的提示) */}
         <motion.div variants={fadeInUp} className="bg-white p-6 rounded-4xl shadow-sm border border-gray-100 hover:-translate-y-1.5 hover:shadow-xl transition-all duration-300">
-          <h3 className="text-1xl font-extrabold text-gray-900 mb-5 text-center">Review this Subject</h3>
+          <h3 className="text-xl font-extrabold text-gray-900 mb-2 text-center">Rate Subject Difficulty</h3>
+          
+          {/* 添加了明确的指示文字 */}
+          <div className="flex justify-center items-center gap-2 mb-4 text-xs font-bold text-gray-400">
+            <span className="bg-green-50 text-green-600 px-2 py-1 rounded-md">1 = Very Easy</span>
+            <span>—</span>
+            <span className="bg-red-50 text-red-600 px-2 py-1 rounded-md">5 = Extremely Hard</span>
+          </div>
           
           <div className="flex justify-center gap-1.5 mb-5 bg-gray-50 rounded-full p-2 border border-gray-100 shadow-inner">
             {[1, 2, 3, 4, 5].map((s) => (
@@ -316,7 +326,7 @@ export default function CourseReviewPage() {
                 key={s} 
                 onClick={() => setRating(s)} 
                 type="button" 
-                className="p-1 rounded-full hover:bg-yellow-50 transition-colors"
+                className="p-1 rounded-full hover:bg-orange-50 transition-colors"
                 whileHover={{ scale: 1.25, transition: { duration: 0.2 } }} 
                 whileTap={{ scale: 0.9 }}
               >
@@ -336,7 +346,7 @@ export default function CourseReviewPage() {
           </button>
         </motion.div>
 
-        {/* 5. 👑 Feedback List (包含 hover凸起效果) */}
+        {/* 5. Feedback List */}
         <motion.div variants={fadeInUp} className="w-full space-y-4 pt-4">
           <div className="flex justify-between items-end mb-4 px-2">
              <h3 className="text-xl font-extrabold text-gray-900">Feedback</h3>
@@ -357,10 +367,8 @@ export default function CourseReviewPage() {
                     className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100 hover:-translate-y-1.5 hover:shadow-lg transition-all duration-300"
                   >
                     
-                    {/* Header: Avatar, Name, and Stars */}
                     <div className="flex justify-between items-center mb-4">
                       <div className="flex items-center gap-3">
-                        {/* 浅蓝色字母头像 */}
                         <div className="w-10 h-10 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-lg">
                           {initial}
                         </div>
@@ -368,14 +376,13 @@ export default function CourseReviewPage() {
                           {review.student_name || "Student"}
                         </span>
                       </div>
-                      <div className="flex gap-1">
+                      <div className="flex gap-1 bg-orange-50 px-2 py-1 rounded-full border border-orange-100">
                         {[1, 2, 3, 4, 5].map((star) => (
-                          <StarIcon key={star} filled={star <= review.rating} size={16} />
+                          <StarIcon key={star} filled={star <= review.rating} size={14} />
                         ))}
                       </div>
                     </div>
 
-                    {/* Comment Box: 灰色气泡背景 */}
                     <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
                       <p className="text-gray-600 text-sm leading-relaxed whitespace-pre-line">
                         {review.comment || "No comment provided."}
