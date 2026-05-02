@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { supabase } from "@/utils/supabase";
 import { useRouter, useParams } from "next/navigation";
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from "recharts";
@@ -14,12 +14,15 @@ type Course = {
   marks_distribution: { name: string; value: number }[] | null;
 };
 
+// 🌟 Review 类型去掉了 reported_by，只保留 report_count
 type Review = {
   id: number;
   student_name: string;
-  rating: number; // 数据库依然存为 rating，但前端展示为 difficulty
+  rating: number; 
   comment: string;
   created_at: string;
+  likes: number; 
+  report_count: number; 
 };
 
 // 🎨 图表配色
@@ -37,7 +40,7 @@ function BookOpenIcon({ className = "w-6 h-6" }: { className?: string }) {
   );
 }
 
-// 🌟 星星图标组件 (颜色改成了更偏向“难度/热度”的橘红色 #F97316)
+// 🌟 星星图标组件
 function StarIcon({ filled, size }: { filled: boolean; size: number }) {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill={filled ? "#F97316" : "#E5E7EB"} style={{ minWidth: size }} className="transition-colors duration-300">
@@ -46,7 +49,31 @@ function StarIcon({ filled, size }: { filled: boolean; size: number }) {
   );
 }
 
-// ✨ 动画配置：瀑布流效果
+// 👍 大拇指图标组件
+function ThumbUpIcon({ className = "w-4 h-4", solid = false }: { className?: string, solid?: boolean }) {
+  return solid ? (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className={className}>
+      <path d="M7.493 18.5c-.425 0-.82-.236-.975-.632A7.48 7.48 0 016 15.125c0-1.75.599-3.358 1.602-4.5698.53-.636.984-1.231 1.492-1.892.45-.588.899-1.161 1.272-1.739a11.2 11.2 0 001.076-1.99 3.012 3.012 0 012.78-1.921H15.5c1.656 0 3 1.343 3 3v.685c0 .356.126.702.355.975l.184.22c.118.14.248.271.385.394a4.5 4.5 0 011.576 3.435v.982a4.5 4.5 0 01-1.576 3.435c-.137.123-.267.254-.385.394l-.184.22a1.5 1.5 0 00-.355.975v.685c0 1.657-1.344 3-3 3h-2.145c-.244 0-.486-.06-.698-.17l-.872-.456a2.002 2.002 0 00-1.85-.015l-.83.43c-.22.113-.47.172-.724.172H7.493z" />
+      <path d="M4.5 18.5A1.5 1.5 0 013 17V10.5a1.5 1.5 0 011.5-1.5h1.5v9.5H4.5z" />
+    </svg>
+  ) : (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className={className}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M6.633 10.5c.806 0 1.533-.446 2.031-1.08a9.041 9.041 0 012.861-2.4c.723-.384 1.35-.956 1.653-1.715a4.498 4.498 0 00.322-1.672V2.75a.75.75 0 01.75-.75 2.25 2.25 0 012.25 2.25v1.372c0 .516.209 1.031.572 1.394.316.316.632.632.948.948A4.49 4.49 0 0119.5 11v1.5a4.49 4.49 0 01-1.328 3.178c-.316.316-.632.632-.948.948-.363.363-.572.878-.572 1.394v1.372a2.25 2.25 0 01-2.25 2.25h-3.21a2.25 2.25 0 01-1.956-1.12l-1.05-1.838a3.75 3.75 0 00-2.47-1.65l-1.55-.38a2.25 2.25 0 01-1.68-2.19V10.5z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 10.5H4.5v9.75h4.5v-9.75z" />
+    </svg>
+  );
+}
+
+// 🚩 举报图标组件
+function FlagIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className={className}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3 3v1.5M3 21v-6m0 0l2.77-.693a9 9 0 016.208.682l.108.054a9 9 0 006.086.71l3.114-.732a48.524 48.524 0 01-.005-10.499l-3.15.743a9 9 0 01-6.105-.712l-.108-.054a9 9 0 00-6.208-.682L3 4.5M3 15V4.5" />
+    </svg>
+  );
+}
+
+// ✨ 动画配置
 const fadeInUp: Variants = {
   hidden: { opacity: 0, y: 20 },
   show: { opacity: 1, y: 0, transition: { duration: 0.5, ease: "easeOut" } }
@@ -61,20 +88,35 @@ export default function CourseReviewPage() {
   const params = useParams();
   const router = useRouter();
   const subjectCode = params.code ? decodeURIComponent(params.code as string) : "";
+  const formRef = useRef<HTMLDivElement>(null); 
 
   const [course, setCourse] = useState<Course | null>(null);
   const [reviews, setReviews] = useState<Review[]>([]);
-  const [rating, setRating] = useState(0); // 这个 state 现在代表难度 (Difficulty)
+  const [rating, setRating] = useState(0); 
   const [comment, setComment] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [summary, setSummary] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
+  
+  const [editingReviewId, setEditingReviewId] = useState<number | null>(null);
+  const [sessionReviewIds, setSessionReviewIds] = useState<number[]>([]); 
+
+  // 🌟 只用本地存储记录点赞和举报，不依赖任何账号
+  const [likedReviews, setLikedReviews] = useState<number[]>([]);
+  const [reportedReviews, setReportedReviews] = useState<number[]>([]); 
 
   const averageRating = reviews.length > 0 
     ? (reviews.reduce((acc, cur) => acc + cur.rating, 0) / reviews.length).toFixed(1) 
     : "0.0";
 
   useEffect(() => {
+    // 页面加载时，读取本地存储的记录
+    const savedLikes = localStorage.getItem("course_liked_reviews");
+    if (savedLikes) setLikedReviews(JSON.parse(savedLikes));
+
+    const savedReports = localStorage.getItem("course_reported_reviews");
+    if (savedReports) setReportedReviews(JSON.parse(savedReports));
+
     async function fetchData() {
       if (!subjectCode) return;
       
@@ -104,17 +146,115 @@ export default function CourseReviewPage() {
     if (rating === 0) return alert("Please rate the difficulty level! ⭐");
     setIsSubmitting(true);
 
-    const { error } = await supabase.from("course_reviews").insert([{
-      subject_code: subjectCode, rating, comment, student_name: "Anonymous Student",
-    }]);
+    let error;
+
+    if (editingReviewId) {
+      // 📝 更新
+      const res = await supabase.from("course_reviews")
+        .update({ rating, comment })
+        .eq("id", editingReviewId);
+      error = res.error;
+    } else {
+      // ➕ 新增
+      const res = await supabase.from("course_reviews")
+        .insert([{ subject_code: subjectCode, rating, comment, student_name: "Anonymous Student" }])
+        .select();
+      
+      error = res.error;
+      
+      if (res.data && res.data.length > 0) {
+        setSessionReviewIds(prev => [...prev, res.data[0].id]);
+      }
+    }
 
     if (!error) {
       await supabase.from("courses").update({ ai_summary: null }).eq("code", subjectCode);
       const { data } = await supabase.from("course_reviews").select("*").eq("subject_code", subjectCode).order("created_at", { ascending: false });
       setReviews(data || []);
-      setRating(0); setComment(""); setSummary("");
+      setRating(0); 
+      setComment(""); 
+      setSummary("");
+      setEditingReviewId(null); 
+    } else {
+      alert("Something went wrong: " + error.message);
     }
     setIsSubmitting(false);
+  }
+
+  // 👍 处理点赞
+  async function handleLike(reviewId: number, currentLikes: number) {
+    if (likedReviews.includes(reviewId)) return; 
+
+    const newLikesCount = (currentLikes || 0) + 1;
+    setReviews(prev => prev.map(r => r.id === reviewId ? { ...r, likes: newLikesCount } : r));
+    
+    const newLikedArray = [...likedReviews, reviewId];
+    setLikedReviews(newLikedArray);
+    localStorage.setItem("course_liked_reviews", JSON.stringify(newLikedArray));
+
+    const { error } = await supabase
+      .from("course_reviews")
+      .update({ likes: newLikesCount })
+      .eq("id", reviewId);
+
+    if (error) console.error("Like error:", error);
+  }
+
+  // 🚩 处理举报 (纯 Local Storage 验证)
+  async function handleReport(review: Review) {
+    // 检查本地缓存，看当前浏览器是否举报过这条评论
+    if (reportedReviews.includes(review.id)) {
+      return alert("You have already reported this comment. 🚩");
+    }
+
+    const confirmReport = window.confirm("Are you sure you want to report this comment?\n(Comments receiving 3 reports will be automatically deleted)");
+    if (!confirmReport) return;
+
+    const newReportCount = (review.report_count || 0) + 1;
+
+    // 🚨 达到 3 次举报，直接从数据库删除
+    if (newReportCount >= 3) {
+      const { error } = await supabase.from("course_reviews").delete().eq("id", review.id);
+      
+      if (!error) {
+        setReviews(prev => prev.filter(r => r.id !== review.id)); // 从 UI 中移除
+        alert("This comment has been removed due to multiple reports. 🛡️");
+      } else {
+        alert("Error removing comment: " + error.message);
+      }
+    } else {
+      // 还没到 3 次，更新数据库的举报数量
+      const { error } = await supabase.from("course_reviews")
+        .update({ report_count: newReportCount })
+        .eq("id", review.id);
+
+      if (!error) {
+        // 更新 UI
+        setReviews(prev => prev.map(r => r.id === review.id ? { ...r, report_count: newReportCount } : r));
+        
+        // 记录到当前浏览器的 Local Storage，防止这台设备再次举报
+        const newReportedArray = [...reportedReviews, review.id];
+        setReportedReviews(newReportedArray);
+        localStorage.setItem("course_reported_reviews", JSON.stringify(newReportedArray));
+        
+        alert("Report submitted successfully. Thank you! 🙏");
+      } else {
+        alert("Error reporting: " + error.message);
+      }
+    }
+  }
+
+  function handleEditClick(review: Review) {
+    setRating(review.rating);
+    setComment(review.comment);
+    setEditingReviewId(review.id);
+    formRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
+  function cancelEdit() {
+    setEditingReviewId(null);
+    setRating(0);
+    setComment("");
   }
 
   async function generateSummary() {
@@ -199,7 +339,6 @@ export default function CourseReviewPage() {
               <div className="flex text-orange-400 text-base gap-0.5 mb-1.5">
                 {[1, 2, 3, 4, 5].map(s => <StarIcon key={s} filled={s <= Math.round(Number(averageRating))} size={18} />)}
               </div>
-              {/* 改成了 Overall Difficulty */}
               <span className="text-xs bg-orange-50 text-orange-700 font-bold px-3 py-1 rounded-full border border-orange-200 shadow-sm">Overall Difficulty</span>
             </div>
           </div>
@@ -309,11 +448,12 @@ export default function CourseReviewPage() {
           )}
         </motion.div>
 
-        {/* 4. Review Form (强化了 Difficulty 的提示) */}
-        <motion.div variants={fadeInUp} className="bg-white p-6 rounded-4xl shadow-sm border border-gray-100 hover:-translate-y-1.5 hover:shadow-xl transition-all duration-300">
-          <h3 className="text-xl font-extrabold text-gray-900 mb-2 text-center">Rate Subject Difficulty</h3>
+        {/* 4. Review Form */}
+        <motion.div ref={formRef} variants={fadeInUp} className="bg-white p-6 rounded-4xl shadow-sm border border-gray-100 hover:-translate-y-1.5 hover:shadow-xl transition-all duration-300">
+          <h3 className="text-xl font-extrabold text-gray-900 mb-2 text-center">
+            {editingReviewId ? "Edit Your Review" : "Rate Subject Difficulty"}
+          </h3>
           
-          {/* 添加了明确的指示文字 */}
           <div className="flex justify-center items-center gap-2 mb-4 text-xs font-bold text-gray-400">
             <span className="bg-green-50 text-green-600 px-2 py-1 rounded-md">1 = Very Easy</span>
             <span>—</span>
@@ -342,8 +482,18 @@ export default function CourseReviewPage() {
             onChange={(e) => setComment(e.target.value)}
           />
           <button onClick={handleSubmit} disabled={isSubmitting} className="w-full py-3.5 bg-gray-900 text-white font-bold rounded-2xl shadow-md hover:bg-black transition-colors">
-            {isSubmitting ? "Submitting..." : "Submit Review"}
+            {isSubmitting ? "Saving..." : (editingReviewId ? "Update Review" : "Submit Review")}
           </button>
+          
+          {editingReviewId && (
+            <button 
+              onClick={cancelEdit} 
+              disabled={isSubmitting} 
+              className="w-full mt-3 py-3.5 bg-white text-gray-500 font-bold rounded-2xl border border-gray-200 shadow-sm hover:bg-gray-50 hover:text-gray-800 transition-colors"
+            >
+              Cancel Edit
+            </button>
+          )}
         </motion.div>
 
         {/* 5. Feedback List */}
@@ -359,12 +509,19 @@ export default function CourseReviewPage() {
             <motion.div variants={staggerContainer} initial="hidden" animate="show" className="space-y-4">
               {reviews.map((review, i) => {
                 const initial = review.student_name ? review.student_name.charAt(0).toUpperCase() : 'S';
+                const canEdit = sessionReviewIds.includes(review.id);
+                
+                // 状态检查
+                const isLiked = likedReviews.includes(review.id);
+                const currentLikes = review.likes || 0;
+                
+                const isReported = reportedReviews.includes(review.id);
                 
                 return (
                   <motion.div 
                     key={i} 
                     variants={fadeInUp} 
-                    className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100 hover:-translate-y-1.5 hover:shadow-lg transition-all duration-300"
+                    className={`bg-white p-5 rounded-3xl shadow-sm border ${editingReviewId === review.id ? 'border-blue-400 shadow-md ring-2 ring-blue-50' : 'border-gray-100 hover:-translate-y-1.5 hover:shadow-lg'} transition-all duration-300 flex flex-col`}
                   >
                     
                     <div className="flex justify-between items-center mb-4">
@@ -373,20 +530,70 @@ export default function CourseReviewPage() {
                           {initial}
                         </div>
                         <span className="font-extrabold text-gray-900 text-base">
-                          {review.student_name || "Student"}
+                          {review.student_name || "Anonymous Student"}
                         </span>
                       </div>
-                      <div className="flex gap-1 bg-orange-50 px-2 py-1 rounded-full border border-orange-100">
-                        {[1, 2, 3, 4, 5].map((star) => (
-                          <StarIcon key={star} filled={star <= review.rating} size={14} />
-                        ))}
+                      
+                      <div className="flex items-center gap-3">
+                        <div className="flex gap-1 bg-orange-50 px-2 py-1 rounded-full border border-orange-100">
+                          {[1, 2, 3, 4, 5].map((star) => (
+                            <StarIcon key={star} filled={star <= review.rating} size={14} />
+                          ))}
+                        </div>
+                        
+                        {canEdit && (
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-medium text-gray-400 hidden sm:block">
+                              * Editable before refresh
+                            </span>
+                            <button 
+                              onClick={() => handleEditClick(review)}
+                              className="text-xs font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition-colors border border-blue-100"
+                            >
+                              Edit
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </div>
 
-                    <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
+                    <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 flex-grow">
                       <p className="text-gray-600 text-sm leading-relaxed whitespace-pre-line">
                         {review.comment || "No comment provided."}
                       </p>
+                    </div>
+
+                    {/* 🌟 互动动作栏：举报 + 点赞 */}
+                    <div className="flex justify-end items-center mt-3 gap-3 pr-1">
+                      
+                      {/* Report Button */}
+                      <button 
+                        onClick={() => handleReport(review)}
+                        disabled={isReported}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
+                          isReported 
+                            ? "bg-red-50 text-red-400 border border-red-100 cursor-default" 
+                            : "bg-white text-gray-400 border border-gray-200 hover:bg-red-50 hover:text-red-500 hover:border-red-200 shadow-sm"
+                        }`}
+                      >
+                        <FlagIcon className="w-3.5 h-3.5" />
+                        <span>{isReported ? "Reported" : "Report"}</span>
+                      </button>
+
+                      {/* Like Button */}
+                      <button 
+                        onClick={() => handleLike(review.id, currentLikes)}
+                        disabled={isLiked}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
+                          isLiked 
+                            ? "bg-blue-50 text-blue-600 border border-blue-100 cursor-default" 
+                            : "bg-white text-gray-400 border border-gray-200 hover:bg-gray-50 hover:text-gray-600 shadow-sm"
+                        }`}
+                      >
+                        <ThumbUpIcon className="w-3.5 h-3.5 mb-0.5" solid={isLiked} />
+                        <span>{currentLikes > 0 ? currentLikes : "Like"}</span>
+                      </button>
+
                     </div>
                     
                   </motion.div>

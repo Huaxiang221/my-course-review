@@ -3,9 +3,8 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/utils/supabase";
 import { useParams, useRouter } from "next/navigation";
-import { motion, AnimatePresence, Variants } from "framer-motion"; // 🌟 引入动画引擎
+import { motion, AnimatePresence, Variants } from "framer-motion"; 
 
-// 👇 更新类型定义：加上 image 和 gender
 type Review = { rating: number };
 type Lecturer = { 
   id: number; 
@@ -21,7 +20,7 @@ const containerVariants: Variants = {
   hidden: { opacity: 0 },
   show: {
     opacity: 1,
-    transition: { staggerChildren: 0.1 } // 卡片依次浮现的时间差
+    transition: { staggerChildren: 0.1 } 
   }
 };
 
@@ -38,33 +37,10 @@ const itemVariants: Variants = {
 export default function LecturerList() {
   const params = useParams();
   const router = useRouter();
-  // 处理 URL 编码，防止 subject code 乱码
   const subjectCode = params.code ? decodeURIComponent(params.code as string) : "";
   
   const [lecturers, setLecturers] = useState<Lecturer[]>([]);
   const [loading, setLoading] = useState(true);
-  
-  // 👑 新增：记录当前访客是不是 VIP
-  const [isVIP, setIsVIP] = useState(false);
-
-  // 检查 VIP 身份
-  useEffect(() => {
-    async function checkVIPStatus() {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user && user.email) {
-        const { data } = await supabase
-          .from("vip_admins")
-          .select("email")
-          .eq("email", user.email)
-          .single();
-        
-        if (data) {
-          setIsVIP(true); // 是 VIP，放行！
-        }
-      }
-    }
-    checkVIPStatus();
-  }, []);
 
   // 获取讲师和评分数据
   useEffect(() => {
@@ -72,7 +48,8 @@ export default function LecturerList() {
       const { data, error } = await supabase
         .from("lecturers")
         .select("*, reviews(rating)")
-        .eq("subject_code", subjectCode);
+        .eq("subject_code", subjectCode)
+        .order("name", { ascending: true }); // 🌟 新增：按名字字母 A-Z 顺序排列
       
       if (error) {
         console.error("Error:", error);
@@ -95,7 +72,7 @@ export default function LecturerList() {
   return (
     <div className="min-h-screen bg-gray-50 p-6 flex flex-col items-center overflow-hidden">
       
-      {/* 🌟 Header (丝滑下拉) */}
+      {/* 🌟 Header */}
       <motion.div 
         initial={{ y: -20, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
@@ -109,10 +86,10 @@ export default function LecturerList() {
           <span className="group-hover:-translate-x-1 transition-transform">←</span> Back
         </button>
         <h1 className="flex-1 text-center text-xl font-extrabold text-blue-900">Lecturers</h1>
-        <div className="w-16"></div> {/* 占位保持居中 */}
+        <div className="w-16"></div> 
       </motion.div>
 
-      {/* 🌟 核心区域：管理 Loading / Empty / List 的退场与进场 */}
+      {/* 🌟 核心区域 */}
       <div className="w-full max-w-md">
         <AnimatePresence mode="wait">
           {loading ? (
@@ -162,27 +139,21 @@ export default function LecturerList() {
                       onClick={() => router.push(`/subject/${subjectCode}/lecturers/${lec.id}`)}
                       className="relative bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between gap-4 hover:shadow-md hover:border-blue-200 transition-all cursor-pointer group overflow-hidden"
                     >
-                      {/* 🌟 隐形蓝条：Hover 时左侧亮起 */}
                       <div className="absolute left-0 top-0 w-1 h-full bg-blue-500 opacity-0 group-hover:opacity-100 transition-opacity"></div>
                       
                       <div className="flex items-center gap-4 overflow-hidden pl-1">
-                        {/* 🔒 头像逻辑保持不变 */}
+                        
+                        {/* 🌟 所有人都能看到头像或 Emoji */}
                         <div className="w-14 h-14 rounded-full overflow-hidden shrink-0 border border-gray-100 bg-gray-50 shadow-sm relative">
-                          {isVIP ? (
-                            lec.image ? (
-                              <img 
-                                src={lec.image} 
-                                alt={lec.name} 
-                                className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300" 
-                              />
-                            ) : (
-                              <div className="w-full h-full flex items-center justify-center text-2xl bg-blue-50">
-                                {lec.gender === "Female" ? "👩‍🏫" : "👨‍🏫"}
-                              </div>
-                            )
+                          {lec.image ? (
+                            <img 
+                              src={lec.image} 
+                              alt={lec.name} 
+                              className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300" 
+                            />
                           ) : (
-                            <div className="w-full h-full bg-gray-50 flex items-center justify-center text-gray-300">
-                              <span className="text-xl">🔒</span>
+                            <div className="w-full h-full flex items-center justify-center text-2xl bg-blue-50">
+                              {lec.gender === "Female" ? "👩‍🏫" : "👨‍🏫"}
                             </div>
                           )}
                         </div>
