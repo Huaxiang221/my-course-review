@@ -284,12 +284,28 @@ export default function CourseReviewPage() {
     setIsGenerating(false);
   }
 
+  // 🌟 同步了强大的 JSON 防御解析逻辑
   let parsedSummary = { en: "", ms: "", zh: "" };
   if (summary) {
     try {
-      parsedSummary = JSON.parse(summary);
-    } catch {
-      parsedSummary = { en: summary, ms: "", zh: "" };
+      let cleanSummary = summary.replace(/```json/gi, "").replace(/```/g, "").trim();
+      cleanSummary = cleanSummary.replace(/\n/g, "\\n").replace(/\r/g, "");
+      parsedSummary = JSON.parse(cleanSummary);
+    } catch (error) {
+      console.warn("JSON解析警告 (已启动备用方案):", error);
+      const extractMatch = (lang: string) => {
+        const regex = new RegExp(`"${lang}"\\s*:\\s*"([\\s\\S]*?)"\\s*(?:,|\\}|$)`);
+        const match = summary.match(regex);
+        return match ? match[1].replace(/\\n/g, "\n").replace(/\\"/g, '"') : "";
+      };
+      const fallbackEn = extractMatch("en");
+      const fallbackMs = extractMatch("ms");
+      const fallbackZh = extractMatch("zh");
+      if (fallbackEn || fallbackMs || fallbackZh) {
+        parsedSummary = { en: fallbackEn || "", ms: fallbackMs || "", zh: fallbackZh || "" };
+      } else {
+        parsedSummary = { en: summary, ms: "", zh: "" };
+      }
     }
   }
 
@@ -301,309 +317,334 @@ export default function CourseReviewPage() {
   );
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6 flex flex-col items-center overflow-hidden pb-24">
+    <div className="min-h-screen bg-gray-50 p-4 md:p-8 flex flex-col items-center overflow-x-hidden pb-24">
       
-      {/* Header */}
-      <motion.div initial={{ y: -20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="w-full max-w-md mb-6 pt-4 flex items-center">
+      {/* 🌟 顶部导航条加宽 */}
+      <motion.div initial={{ y: -20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="w-full max-w-5xl mb-8 pt-4 flex items-center">
         <button onClick={() => router.back()} className="text-gray-400 hover:text-blue-600 transition-colors font-medium group flex items-center gap-2">
            <span className="group-hover:-translate-x-1 transition-transform">←</span> Back
         </button>
-        <h1 className="flex-1 text-center text-xl font-extrabold text-blue-900 tracking-tight">About Course</h1>
+        <h1 className="flex-1 text-center text-2xl font-extrabold text-blue-900 tracking-tight">About Course</h1>
         <div className="w-16"></div>
       </motion.div>
 
-      <motion.div variants={staggerContainer} initial="hidden" animate="show" className="w-full max-w-md space-y-6">
+      {/* 🌟 核心修改：双栏网格布局 */}
+      <motion.div 
+        variants={staggerContainer} 
+        initial="hidden" 
+        animate="show" 
+        className="w-full max-w-5xl flex flex-col lg:flex-row gap-8 items-start"
+      >
         
-        {/* 1. 课程核心信息 */}
-        <motion.div variants={fadeInUp} className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-gray-100 text-center relative overflow-hidden hover:-translate-y-1.5 hover:shadow-xl transition-all duration-300">
-          <div className="absolute top-0 left-0 w-full h-2 bg-linear-to-r from-green-400 via-blue-500 to-indigo-500"></div>
+        {/* ==========================================
+            左侧边栏 (课程信息 + 图表 + 评分表单) -> 固定悬浮
+        ========================================== */}
+        <div className="w-full lg:w-[400px] flex flex-col gap-6 lg:sticky lg:top-8 shrink-0">
           
-          <div className="relative inline-flex mb-4">
-              <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-3xl flex items-center justify-center text-3xl shadow-inner border border-blue-100">
-                  <BookOpenIcon className="w-8 h-8" />
-              </div>
-          </div>
-
-          <h2 className="text-2xl font-black text-gray-900 mb-1">{course.code}</h2>
-          <h3 className="text-gray-500 font-medium mb-6 px-4">{course.name}</h3>
-          
-          <div className="grid grid-cols-2 gap-3 mb-6 bg-gray-50/70 rounded-2xl p-4 border border-gray-100 shadow-inner">
-            <div className="flex flex-col items-center border-r border-gray-200">
-               <div className="flex items-end gap-1">
-                 <span className="text-5xl font-black text-gray-800 leading-none">{averageRating}</span>
-                 <span className="text-sm text-gray-400 font-bold mb-0.5">/5.0</span>
-               </div>
-               <p className="text-xs text-gray-400 font-medium mt-1.5">{reviews.length} Student Reviews</p>
+          {/* 1. 课程核心信息 */}
+          <motion.div variants={fadeInUp} className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-gray-100 text-center relative overflow-hidden hover:-translate-y-1.5 hover:shadow-xl transition-all duration-300">
+            <div className="absolute top-0 left-0 w-full h-2 bg-linear-to-r from-green-400 via-blue-500 to-indigo-500"></div>
+            
+            <div className="relative inline-flex mb-4">
+                <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-3xl flex items-center justify-center text-3xl shadow-inner border border-blue-100 mt-2">
+                    <BookOpenIcon className="w-8 h-8" />
+                </div>
             </div>
-            <div className="flex flex-col items-center justify-center">
-              <div className="flex text-orange-400 text-base gap-0.5 mb-1.5">
-                {[1, 2, 3, 4, 5].map(s => <StarIcon key={s} filled={s <= Math.round(Number(averageRating))} size={18} />)}
+
+            <h2 className="text-2xl font-black text-gray-900 mb-1">{course.code}</h2>
+            <h3 className="text-gray-500 font-medium mb-6 px-4">{course.name}</h3>
+            
+            <div className="grid grid-cols-2 gap-3 mb-6 bg-gray-50/70 rounded-2xl p-4 border border-gray-100 shadow-inner">
+              <div className="flex flex-col items-center border-r border-gray-200">
+                 <div className="flex items-end gap-1">
+                   <span className="text-5xl font-black text-gray-800 leading-none">{averageRating}</span>
+                   <span className="text-sm text-gray-400 font-bold mb-0.5">/5.0</span>
+                 </div>
+                 <p className="text-xs text-gray-400 font-medium mt-1.5">{reviews.length} Student Reviews</p>
               </div>
-              <span className="text-xs bg-orange-50 text-orange-700 font-bold px-3 py-1 rounded-full border border-orange-200 shadow-sm">Overall Difficulty</span>
-            </div>
-          </div>
-
-          <p className="text-sm text-gray-500 leading-relaxed px-2 whitespace-pre-line">{course.description || "No description provided."}</p>
-        </motion.div>
-
-        {/* 2. Marks Distribution Chart */}
-        <motion.div variants={fadeInUp} className="bg-white p-6 rounded-4xl shadow-sm border border-gray-100 hover:-translate-y-1.5 hover:shadow-xl transition-all duration-300">
-          <h3 className="text-xl font-extrabold text-gray-900 mb-1 text-center">Marks Distribution</h3>
-          <p className="text-sm text-gray-400 text-center mb-5 font-medium">Weightage of assessments</p>
-          
-          {course.marks_distribution ? (
-            <div className="flex flex-col items-center">
-              <div className="h-60 w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={course.marks_distribution}
-                      cx="50%" cy="50%"
-                      innerRadius={70} outerRadius={95}
-                      cornerRadius={10} 
-                      paddingAngle={3} 
-                      dataKey="value"
-                      stroke="#ffffff" 
-                      strokeWidth={3}
-                    >
-                      {course.marks_distribution.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip contentStyle={{ borderRadius: '14px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }}/>
-                    <Legend content={() => null} />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-
-              <div className="grid grid-cols-2 gap-x-6 gap-y-2 mt-4 px-4">
-                {course.marks_distribution.map((entry, index) => (
-                  <div key={index} className="flex items-center gap-2.5">
-                    <div className="w-4 h-4 rounded-md shadow-inner border-2 border-white shrink-0" style={{ backgroundColor: COLORS[index % COLORS.length] }}></div>
-                    <span className="text-xs font-bold text-gray-600 truncate">{entry.name}</span>
-                    <span className="text-sm font-black text-gray-800 ml-auto">{entry.value}%</span>
-                  </div>
-                ))}
+              <div className="flex flex-col items-center justify-center">
+                <div className="flex text-orange-400 text-base gap-0.5 mb-1.5">
+                  {[1, 2, 3, 4, 5].map(s => <StarIcon key={s} filled={s <= Math.round(Number(averageRating))} size={18} />)}
+                </div>
+                <span className="text-xs bg-orange-50 text-orange-700 font-bold px-3 py-1 rounded-full border border-orange-200 shadow-sm">Overall Difficulty</span>
               </div>
             </div>
-          ) : (
-            <div className="h-40 flex items-center justify-center bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200">
-              <p className="text-gray-400 text-sm font-medium">No marks data available.</p>
-            </div>
-          )}
-        </motion.div>
 
-        {/* 3. AI Summary */}
-        <motion.div variants={fadeInUp}>
-          {!summary ? (
-            <button onClick={generateSummary} disabled={isGenerating || reviews.length === 0} className="w-full bg-linear-to-r from-blue-600 to-indigo-600 text-white p-4 rounded-2xl font-bold shadow-[0_4px_14px_0_rgba(79,70,229,0.3)] hover:shadow-lg hover:-translate-y-1.5 disabled:opacity-50 disabled:hover:translate-y-0 transition-all flex justify-center items-center gap-2 text-sm duration-300">
-              {isGenerating ? "AI is Analyzing..." : <><span>✨</span> Generate AI Summary</>}
-            </button>
-          ) : (
-            <div className="bg-[#F8FAFC] p-5 rounded-4xl border border-indigo-100 shadow-sm relative overflow-hidden hover:-translate-y-1.5 hover:shadow-xl transition-all duration-300">
-              <div className="flex justify-between items-center mb-5 relative z-10">
-                <h3 className="text-[#312E81] font-black text-lg flex items-center gap-2">
-                  <motion.span 
-                    animate={{ rotate: [0, 10, -10, 0], scale: [1, 1.1, 1] }}
-                    transition={{ repeat: Infinity, duration: 2.5, ease: "easeInOut" }}
-                    className="inline-block"
-                  >
-                    ✨
-                  </motion.span> 
-                  Course Summary
-                </h3>
-                <div className="flex items-center gap-1.5 bg-white px-3 py-1.5 rounded-full border border-indigo-100 shadow-sm">
-                  <span className="w-2 h-2 bg-indigo-500 rounded-full animate-pulse"></span>
-                  <span className="text-[10px] font-bold text-indigo-600 tracking-wider">AI GENERATED</span>
+            <p className="text-sm text-gray-500 leading-relaxed px-2 whitespace-pre-line">{course.description || "No description provided."}</p>
+          </motion.div>
+
+          {/* 2. Marks Distribution Chart */}
+          <motion.div variants={fadeInUp} className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-gray-100 hover:-translate-y-1.5 hover:shadow-xl transition-all duration-300">
+            <h3 className="text-xl font-extrabold text-gray-900 mb-1 text-center">Marks Distribution</h3>
+            <p className="text-sm text-gray-400 text-center mb-5 font-medium">Weightage of assessments</p>
+            
+            {course.marks_distribution ? (
+              <div className="flex flex-col items-center">
+                <div className="h-60 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={course.marks_distribution}
+                        cx="50%" cy="50%"
+                        innerRadius={70} outerRadius={95}
+                        cornerRadius={10} 
+                        paddingAngle={3} 
+                        dataKey="value"
+                        stroke="#ffffff" 
+                        strokeWidth={3}
+                      >
+                        {course.marks_distribution.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip contentStyle={{ borderRadius: '14px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }}/>
+                      <Legend content={() => null} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+
+                <div className="grid grid-cols-2 gap-x-6 gap-y-2 mt-4 px-4 w-full">
+                  {course.marks_distribution.map((entry, index) => (
+                    <div key={index} className="flex items-center gap-2.5">
+                      <div className="w-4 h-4 rounded-md shadow-inner border-2 border-white shrink-0" style={{ backgroundColor: COLORS[index % COLORS.length] }}></div>
+                      <span className="text-xs font-bold text-gray-600 truncate">{entry.name}</span>
+                      <span className="text-sm font-black text-gray-800 ml-auto">{entry.value}%</span>
+                    </div>
+                  ))}
                 </div>
               </div>
-
-              <div className="space-y-3 relative z-10">
-                {parsedSummary.en && (
-                  <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-inner">
-                    <span className="text-xs font-bold text-blue-500 mb-1.5 flex items-center gap-1.5 tracking-wide">
-                      <span className="text-base">🇬🇧</span> English
-                    </span>
-                    <p className="text-gray-700 text-sm leading-relaxed">{parsedSummary.en}</p>
-                  </div>
-                )}
-                {parsedSummary.ms && (
-                  <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-inner">
-                    <span className="text-xs font-bold text-indigo-400 mb-1.5 flex items-center gap-1.5 tracking-wide">
-                      <span className="text-base">🇲🇾</span> Bahasa Melayu
-                    </span>
-                    <p className="text-gray-700 text-sm leading-relaxed">{parsedSummary.ms}</p>
-                  </div>
-                )}
-                {parsedSummary.zh && (
-                  <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-inner">
-                    <span className="text-xs font-bold text-teal-500 mb-1.5 flex items-center gap-1.5 tracking-wide">
-                      <span className="text-base">🇨🇳</span> 中文
-                    </span>
-                    <p className="text-gray-700 text-sm leading-relaxed whitespace-pre-line">{parsedSummary.zh}</p>
-                  </div>
-                )}
+            ) : (
+              <div className="h-40 flex items-center justify-center bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200">
+                <p className="text-gray-400 text-sm font-medium">No marks data available.</p>
               </div>
+            )}
+          </motion.div>
+
+          {/* 3. Review Form */}
+          <motion.div ref={formRef} variants={fadeInUp} className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-gray-100 hover:-translate-y-1.5 hover:shadow-xl transition-all duration-300">
+            <h3 className="text-xl font-extrabold text-gray-900 mb-2 text-center">
+              {editingReviewId ? "Edit Your Review" : "Rate Subject Difficulty"}
+            </h3>
+            
+            <div className="flex justify-center items-center gap-2 mb-4 text-xs font-bold text-gray-400">
+              <span className="bg-green-50 text-green-600 px-2 py-1 rounded-md">1 = Very Easy</span>
+              <span>—</span>
+              <span className="bg-red-50 text-red-600 px-2 py-1 rounded-md">5 = Extremely Hard</span>
             </div>
-          )}
-        </motion.div>
-
-        {/* 4. Review Form */}
-        <motion.div ref={formRef} variants={fadeInUp} className="bg-white p-6 rounded-4xl shadow-sm border border-gray-100 hover:-translate-y-1.5 hover:shadow-xl transition-all duration-300">
-          <h3 className="text-xl font-extrabold text-gray-900 mb-2 text-center">
-            {editingReviewId ? "Edit Your Review" : "Rate Subject Difficulty"}
-          </h3>
-          
-          <div className="flex justify-center items-center gap-2 mb-4 text-xs font-bold text-gray-400">
-            <span className="bg-green-50 text-green-600 px-2 py-1 rounded-md">1 = Very Easy</span>
-            <span>—</span>
-            <span className="bg-red-50 text-red-600 px-2 py-1 rounded-md">5 = Extremely Hard</span>
-          </div>
-          
-          <div className="flex justify-center gap-1.5 mb-5 bg-gray-50 rounded-full p-2 border border-gray-100 shadow-inner">
-            {[1, 2, 3, 4, 5].map((s) => (
-              <motion.button 
-                key={s} 
-                onClick={() => setRating(s)} 
-                type="button" 
-                className="p-1 rounded-full hover:bg-orange-50 transition-colors"
-                whileHover={{ scale: 1.25, transition: { duration: 0.2 } }} 
-                whileTap={{ scale: 0.9 }}
-              >
-                <StarIcon filled={s <= rating} size={36} />
-              </motion.button>
-            ))}
-          </div>
-          <textarea
-            className="w-full p-4 border border-gray-200 rounded-2xl bg-white focus:outline-none focus:ring-2 focus:ring-blue-300 mb-4 text-sm resize-none shadow-inner"
-            rows={3}
-            placeholder="Is this subject hard? How's the workload?"
-            value={comment}
-            onChange={(e) => setComment(e.target.value)}
-          />
-          <button onClick={handleSubmit} disabled={isSubmitting} className="w-full py-3.5 bg-gray-900 text-white font-bold rounded-2xl shadow-md hover:bg-black transition-colors">
-            {isSubmitting ? "Saving..." : (editingReviewId ? "Update Review" : "Submit Review")}
-          </button>
-          
-          {editingReviewId && (
-            <button 
-              onClick={cancelEdit} 
-              disabled={isSubmitting} 
-              className="w-full mt-3 py-3.5 bg-white text-gray-500 font-bold rounded-2xl border border-gray-200 shadow-sm hover:bg-gray-50 hover:text-gray-800 transition-colors"
-            >
-              Cancel Edit
+            
+            <div className="flex justify-center gap-1.5 mb-5 bg-gray-50 rounded-full p-2 border border-gray-100 shadow-inner">
+              {[1, 2, 3, 4, 5].map((s) => (
+                <motion.button 
+                  key={s} 
+                  onClick={() => setRating(s)} 
+                  type="button" 
+                  className="p-1 rounded-full hover:bg-orange-50 transition-colors"
+                  whileHover={{ scale: 1.25, transition: { duration: 0.2 } }} 
+                  whileTap={{ scale: 0.9 }}
+                >
+                  <StarIcon filled={s <= rating} size={36} />
+                </motion.button>
+              ))}
+            </div>
+            <textarea
+              className="w-full p-4 border border-gray-200 rounded-2xl bg-white focus:outline-none focus:ring-2 focus:ring-blue-300 mb-4 text-sm resize-none shadow-inner"
+              rows={4}
+              placeholder="Is this subject hard? How's the workload?"
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
+            />
+            <button onClick={handleSubmit} disabled={isSubmitting} className="w-full py-3.5 bg-gray-900 text-white font-bold rounded-2xl shadow-md hover:bg-black transition-colors">
+              {isSubmitting ? "Saving..." : (editingReviewId ? "Update Review" : "Submit Review")}
             </button>
-          )}
-        </motion.div>
+            
+            {editingReviewId && (
+              <button 
+                onClick={cancelEdit} 
+                disabled={isSubmitting} 
+                className="w-full mt-3 py-3.5 bg-white text-gray-500 font-bold rounded-2xl border border-gray-200 shadow-sm hover:bg-gray-50 hover:text-gray-800 transition-colors"
+              >
+                Cancel Edit
+              </button>
+            )}
+          </motion.div>
+        </div>
 
-        {/* 5. Feedback List */}
-        <motion.div variants={fadeInUp} className="w-full space-y-4 pt-4">
-          <div className="flex justify-between items-end mb-4 px-2">
-             <h3 className="text-xl font-extrabold text-gray-900">Feedback</h3>
-             <span className="text-sm font-medium text-gray-400">{reviews.length} reviews</span>
-          </div>
+        {/* ==========================================
+            右侧主内容区 (AI Summary + 评价列表)
+        ========================================== */}
+        <div className="flex-1 w-full flex flex-col gap-6 min-w-0">
+          
+          {/* 4. AI Summary */}
+          <motion.div variants={fadeInUp}>
+            {!summary ? (
+              <button onClick={generateSummary} disabled={isGenerating || reviews.length === 0} className="w-full bg-linear-to-r from-blue-600 to-indigo-600 text-white p-5 rounded-[2.5rem] font-bold shadow-[0_4px_14px_0_rgba(79,70,229,0.3)] hover:shadow-lg hover:-translate-y-1.5 disabled:opacity-50 disabled:hover:translate-y-0 transition-all flex justify-center items-center gap-2 text-base duration-300">
+                {isGenerating ? "AI is Analyzing..." : <><span>✨</span> Generate AI Summary</>}
+              </button>
+            ) : (
+              <div className="bg-[#F8FAFC] p-6 rounded-[2.5rem] border border-indigo-100 shadow-sm relative overflow-hidden hover:-translate-y-1.5 hover:shadow-xl transition-all duration-300">
+                <div className="flex justify-between items-center mb-6 relative z-10">
+                  <h3 className="text-[#312E81] font-black text-xl flex items-center gap-2">
+                    <motion.span 
+                      animate={{ rotate: [0, 10, -10, 0], scale: [1, 1.1, 1] }}
+                      transition={{ repeat: Infinity, duration: 2.5, ease: "easeInOut" }}
+                      className="inline-block"
+                    >
+                      ✨
+                    </motion.span> 
+                    Course Summary
+                  </h3>
+                  <div className="flex items-center gap-1.5 bg-white px-3 py-1.5 rounded-full border border-indigo-100 shadow-sm">
+                    <span className="w-2 h-2 bg-indigo-500 rounded-full animate-pulse"></span>
+                    <span className="text-[10px] font-bold text-indigo-600 tracking-wider">AI GENERATED</span>
+                  </div>
+                </div>
 
-          {reviews.length === 0 ? (
-             <p className="text-gray-400 text-center py-6">No reviews yet. Be the first!</p>
-          ) : (
-            <motion.div variants={staggerContainer} initial="hidden" animate="show" className="space-y-4">
-              {reviews.map((review, i) => {
-                const initial = review.student_name ? review.student_name.charAt(0).toUpperCase() : 'S';
-                const canEdit = sessionReviewIds.includes(review.id);
-                
-                // 状态检查
-                const isLiked = likedReviews.includes(review.id);
-                const currentLikes = review.likes || 0;
-                
-                const isReported = reportedReviews.includes(review.id);
-                
-                return (
-                  <motion.div 
-                    key={i} 
-                    variants={fadeInUp} 
-                    className={`bg-white p-5 rounded-3xl shadow-sm border ${editingReviewId === review.id ? 'border-blue-400 shadow-md ring-2 ring-blue-50' : 'border-gray-100 hover:-translate-y-1.5 hover:shadow-lg'} transition-all duration-300 flex flex-col`}
-                  >
-                    
-                    <div className="flex justify-between items-center mb-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-lg">
-                          {initial}
-                        </div>
-                        <span className="font-extrabold text-gray-900 text-base">
-                          {review.student_name || "Anonymous Student"}
-                        </span>
-                      </div>
-                      
-                      <div className="flex items-center gap-3">
-                        <div className="flex gap-1 bg-orange-50 px-2 py-1 rounded-full border border-orange-100">
-                          {[1, 2, 3, 4, 5].map((star) => (
-                            <StarIcon key={star} filled={star <= review.rating} size={14} />
-                          ))}
+                <div className="space-y-4 relative z-10">
+                  {parsedSummary.en && (
+                    <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-inner">
+                      <span className="text-sm font-bold text-blue-500 mb-2 flex items-center gap-1.5 tracking-wide">
+                        <span className="text-base">🇬🇧</span> English
+                      </span>
+                      <p className="text-gray-700 text-[15px] leading-relaxed whitespace-pre-line">{parsedSummary.en}</p>
+                    </div>
+                  )}
+                  {parsedSummary.ms && (
+                    <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-inner">
+                      <span className="text-sm font-bold text-indigo-400 mb-2 flex items-center gap-1.5 tracking-wide">
+                        <span className="text-base">🇲🇾</span> Bahasa Melayu
+                      </span>
+                      <p className="text-gray-700 text-[15px] leading-relaxed whitespace-pre-line">{parsedSummary.ms}</p>
+                    </div>
+                  )}
+                  {parsedSummary.zh && (
+                    <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-inner">
+                      <span className="text-sm font-bold text-teal-500 mb-2 flex items-center gap-1.5 tracking-wide">
+                        <span className="text-base">🇨🇳</span> 中文
+                      </span>
+                      <p className="text-gray-700 text-[15px] leading-relaxed whitespace-pre-line">{parsedSummary.zh}</p>
+                    </div>
+                  )}
+                  {!parsedSummary.en && !parsedSummary.ms && !parsedSummary.zh && (
+                    <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-inner">
+                       <p className="text-gray-700 text-[15px] leading-relaxed whitespace-pre-line">{summary}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </motion.div>
+
+          {/* 5. Feedback List */}
+          <motion.div variants={fadeInUp} className="w-full space-y-5 mt-2">
+            <div className="flex justify-between items-end mb-2 px-2">
+               <h3 className="text-2xl font-extrabold text-gray-900">Student Feedback</h3>
+               <span className="text-sm font-medium text-gray-400 bg-white px-3 py-1 rounded-full border border-gray-200 shadow-sm">{reviews.length} reviews</span>
+            </div>
+
+            {reviews.length === 0 ? (
+               <div className="bg-white border border-gray-100 rounded-3xl p-10 flex flex-col items-center justify-center shadow-sm">
+                 <span className="text-4xl mb-3">💬</span>
+                 <p className="text-gray-400 font-medium">No reviews yet. Be the first to share your experience!</p>
+               </div>
+            ) : (
+              <motion.div variants={staggerContainer} initial="hidden" animate="show" className="space-y-5">
+                {reviews.map((review, i) => {
+                  const initial = review.student_name ? review.student_name.charAt(0).toUpperCase() : 'S';
+                  const canEdit = sessionReviewIds.includes(review.id);
+                  const isLiked = likedReviews.includes(review.id);
+                  const currentLikes = review.likes || 0;
+                  const isReported = reportedReviews.includes(review.id);
+                  
+                  return (
+                    <motion.div 
+                      key={i} 
+                      variants={fadeInUp} 
+                      className={`bg-white p-6 rounded-3xl shadow-sm border ${editingReviewId === review.id ? 'border-orange-400 shadow-md ring-2 ring-orange-50' : 'border-gray-100 hover:-translate-y-1.5 hover:shadow-md'} transition-all duration-300 flex flex-col`}
+                    >
+                      <div className="flex justify-between items-center mb-5">
+                        <div className="flex items-center gap-3">
+                          <div className="w-12 h-12 rounded-full bg-orange-50 text-orange-600 flex items-center justify-center font-bold text-xl">
+                            {initial}
+                          </div>
+                          <div className="flex flex-col">
+                            <span className="font-extrabold text-gray-900 text-[17px]">
+                              {review.student_name || "Anonymous Student"}
+                            </span>
+                            {/* 🌟 补充了日期显示逻辑，和 Lecturer 页面保持一致 */}
+                            <span className="text-xs text-gray-400 font-medium">
+                              {new Date(review.created_at).toLocaleDateString('en-MY', { year: 'numeric', month: 'short', day: 'numeric' })}
+                            </span>
+                          </div>
                         </div>
                         
-                        {canEdit && (
-                          <div className="flex items-center gap-2">
-                            <span className="text-[10px] font-medium text-gray-400 hidden sm:block">
-                              * Editable before refresh
-                            </span>
-                            <button 
-                              onClick={() => handleEditClick(review)}
-                              className="text-xs font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition-colors border border-blue-100"
-                            >
-                              Edit
-                            </button>
+                        <div className="flex items-center gap-3">
+                          <div className="flex gap-1 bg-orange-50 px-2.5 py-1.5 rounded-full border border-orange-100 shadow-sm">
+                            {[1, 2, 3, 4, 5].map((star) => (
+                              <StarIcon key={star} filled={star <= review.rating} size={16} />
+                            ))}
                           </div>
-                        )}
+                          
+                          {canEdit && (
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] font-medium text-gray-400 hidden sm:block">
+                                * Editable before refresh
+                              </span>
+                              <button 
+                                onClick={() => handleEditClick(review)}
+                                className="text-xs font-bold text-orange-600 bg-orange-50 hover:bg-orange-100 px-3 py-1.5 rounded-lg transition-colors border border-orange-100"
+                              >
+                                Edit
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    </div>
 
-                    <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 flex-grow">
-                      <p className="text-gray-600 text-sm leading-relaxed whitespace-pre-line">
-                        {review.comment || "No comment provided."}
-                      </p>
-                    </div>
+                      <div className="bg-gray-50/80 p-5 rounded-2xl border border-gray-100 flex-grow shadow-inner">
+                        <p className="text-gray-700 text-[15px] leading-relaxed whitespace-pre-line">
+                          {review.comment || "No comment provided."}
+                        </p>
+                      </div>
 
-                    {/* 🌟 互动动作栏：举报 + 点赞 */}
-                    <div className="flex justify-end items-center mt-3 gap-3 pr-1">
-                      
-                      {/* Report Button */}
-                      <button 
-                        onClick={() => handleReport(review)}
-                        disabled={isReported}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
-                          isReported 
-                            ? "bg-red-50 text-red-400 border border-red-100 cursor-default" 
-                            : "bg-white text-gray-400 border border-gray-200 hover:bg-red-50 hover:text-red-500 hover:border-red-200 shadow-sm"
-                        }`}
-                      >
-                        <FlagIcon className="w-3.5 h-3.5" />
-                        <span>{isReported ? "Reported" : "Report"}</span>
-                      </button>
+                      {/* 🌟 互动动作栏：举报 + 点赞 */}
+                      <div className="flex justify-end items-center mt-4 gap-3">
+                        <button 
+                          onClick={() => handleReport(review)}
+                          disabled={isReported}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
+                            isReported 
+                              ? "bg-red-50 text-red-400 border border-red-100 cursor-default" 
+                              : "bg-white text-gray-400 border border-gray-200 hover:bg-red-50 hover:text-red-500 hover:border-red-200 shadow-sm"
+                          }`}
+                        >
+                          <FlagIcon className="w-3.5 h-3.5" />
+                          <span>{isReported ? "Reported" : "Report"}</span>
+                        </button>
 
-                      {/* Like Button */}
-                      <button 
-                        onClick={() => handleLike(review.id, currentLikes)}
-                        disabled={isLiked}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
-                          isLiked 
-                            ? "bg-blue-50 text-blue-600 border border-blue-100 cursor-default" 
-                            : "bg-white text-gray-400 border border-gray-200 hover:bg-gray-50 hover:text-gray-600 shadow-sm"
-                        }`}
-                      >
-                        <ThumbUpIcon className="w-3.5 h-3.5 mb-0.5" solid={isLiked} />
-                        <span>{currentLikes > 0 ? currentLikes : "Like"}</span>
-                      </button>
+                        <button 
+                          onClick={() => handleLike(review.id, currentLikes)}
+                          disabled={isLiked}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
+                            isLiked 
+                              ? "bg-orange-50 text-orange-600 border border-orange-100 cursor-default" 
+                              : "bg-white text-gray-400 border border-gray-200 hover:bg-gray-50 hover:text-gray-600 shadow-sm"
+                          }`}
+                        >
+                          <ThumbUpIcon className="w-3.5 h-3.5 mb-0.5" solid={isLiked} />
+                          <span>{currentLikes > 0 ? currentLikes : "Like"}</span>
+                        </button>
+                      </div>
 
-                    </div>
-                    
-                  </motion.div>
-                );
-              })}
-            </motion.div>
-          )}
-        </motion.div>
+                    </motion.div>
+                  );
+                })}
+              </motion.div>
+            )}
+          </motion.div>
 
+        </div>
       </motion.div>
+
     </div>
   );
 }
