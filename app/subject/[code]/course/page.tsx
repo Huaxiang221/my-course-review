@@ -20,6 +20,7 @@ type Review = {
   student_name: string;
   rating: number; 
   comment: string;
+  comment_en?: string | null; // ✨ 新增：持久化保存的英文翻译字段
   created_at: string;
   likes: number; 
   report_count: number; 
@@ -105,6 +106,10 @@ export default function CourseReviewPage() {
   const [likedReviews, setLikedReviews] = useState<number[]>([]);
   const [reportedReviews, setReportedReviews] = useState<number[]>([]); 
 
+  // ✨ 新增：独立的翻译状态管理
+  const [showTranslation, setShowTranslation] = useState<Record<number, boolean>>({});
+  const [isTranslating, setIsTranslating] = useState<Record<number, boolean>>({});
+
   const averageRating = reviews.length > 0 
     ? (reviews.reduce((acc, cur) => acc + cur.rating, 0) / reviews.length).toFixed(1) 
     : "0.0";
@@ -149,9 +154,9 @@ export default function CourseReviewPage() {
     let error;
 
     if (editingReviewId) {
-      // 📝 更新
+      // 📝 更新 (✨ 同时清空翻译缓存 comment_en)
       const res = await supabase.from("course_reviews")
-        .update({ rating, comment })
+        .update({ rating, comment, comment_en: null })
         .eq("id", editingReviewId);
       error = res.error;
     } else {
@@ -181,6 +186,42 @@ export default function CourseReviewPage() {
     setIsSubmitting(false);
   }
 
+  // ✨ 新增：处理点击翻译按钮的逻辑 (针对 course_reviews 表)
+  async function handleTranslateToggle(review: Review) {
+    if (review.comment_en) {
+      setShowTranslation(prev => ({ ...prev, [review.id]: !prev[review.id] }));
+      return;
+    }
+
+    setIsTranslating(prev => ({ ...prev, [review.id]: true }));
+    try {
+      const response = await fetch("/api/translate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: review.comment }),
+      });
+      const data = await response.json();
+      
+      if (!response.ok) throw new Error(data.error || "Translation failed");
+
+      const translatedText = data.translatedText;
+
+      setReviews(prev => prev.map(r => r.id === review.id ? { ...r, comment_en: translatedText } : r));
+      setShowTranslation(prev => ({ ...prev, [review.id]: true }));
+
+      supabase.from("course_reviews").update({ comment_en: translatedText }).eq("id", review.id)
+        .then(({ error }) => {
+          if (error) console.error("Failed to save translation to Supabase:", error);
+        });
+
+    } catch (error: any) {
+      console.error("Translation Error:", error);
+      alert("Error translating comment: " + error.message);
+    } finally {
+      setIsTranslating(prev => ({ ...prev, [review.id]: false }));
+    }
+  }
+
   // 👍 处理点赞
   async function handleLike(reviewId: number, currentLikes: number) {
     if (likedReviews.includes(reviewId)) return; 
@@ -202,7 +243,6 @@ export default function CourseReviewPage() {
 
   // 🚩 处理举报 (纯 Local Storage 验证)
   async function handleReport(review: Review) {
-    // 检查本地缓存，看当前浏览器是否举报过这条评论
     if (reportedReviews.includes(review.id)) {
       return alert("You have already reported this comment. 🚩");
     }
@@ -217,22 +257,19 @@ export default function CourseReviewPage() {
       const { error } = await supabase.from("course_reviews").delete().eq("id", review.id);
       
       if (!error) {
-        setReviews(prev => prev.filter(r => r.id !== review.id)); // 从 UI 中移除
+        setReviews(prev => prev.filter(r => r.id !== review.id)); 
         alert("This comment has been removed due to multiple reports. 🛡️");
       } else {
         alert("Error removing comment: " + error.message);
       }
     } else {
-      // 还没到 3 次，更新数据库的举报数量
       const { error } = await supabase.from("course_reviews")
         .update({ report_count: newReportCount })
         .eq("id", review.id);
 
       if (!error) {
-        // 更新 UI
         setReviews(prev => prev.map(r => r.id === review.id ? { ...r, report_count: newReportCount } : r));
         
-        // 记录到当前浏览器的 Local Storage，防止这台设备再次举报
         const newReportedArray = [...reportedReviews, review.id];
         setReportedReviews(newReportedArray);
         localStorage.setItem("course_reported_reviews", JSON.stringify(newReportedArray));
@@ -555,6 +592,12 @@ export default function CourseReviewPage() {
                   const currentLikes = review.likes || 0;
                   const isReported = reportedReviews.includes(review.id);
                   
+                  // ✨ 决定当前显示的内容
+                  const isShowingTranslation = showTranslation[review.id];
+                  const displayComment = isShowingTranslation && review.comment_en 
+                    ? review.comment_en 
+                    : review.comment || "No comment provided.";
+                  
                   return (
                     <motion.div 
                       key={i} 
@@ -601,9 +644,28 @@ export default function CourseReviewPage() {
                       </div>
 
                       <div className="bg-gray-50/80 p-5 rounded-2xl border border-gray-100 flex-grow shadow-inner">
+                        {/* 留言内容展示 */}
                         <p className="text-gray-700 text-[15px] leading-relaxed whitespace-pre-line">
-                          {review.comment || "No comment provided."}
+                          {displayComment}
                         </p>
+
+                        {/* ✨ 新增：独立的 Translate to English 按钮 */}
+                        {review.comment && (
+                          <div className="mt-3 flex justify-end">
+                            <button
+                              onClick={() => handleTranslateToggle(review)}
+                              disabled={isTranslating[review.id]}
+                              className="flex items-center gap-1.5 text-xs font-semibold text-blue-500 hover:text-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              <span className="text-sm">🌐</span>
+                              {isTranslating[review.id] 
+                                ? "Translating..." 
+                                : (isShowingTranslation 
+                                    ? "Show Original" 
+                                    : (review.comment_en ? "Show Translation" : "Translate to English"))}
+                            </button>
+                          </div>
+                        )}
                       </div>
 
                       {/* 🌟 互动动作栏：举报 + 点赞 */}
