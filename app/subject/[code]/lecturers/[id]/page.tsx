@@ -22,12 +22,13 @@ type Review = {
   student_name: string;
   rating: number;
   comment: string;
+  comment_en?: string | null; // ✨ 新增：持久化保存的英文翻译字段
   created_at: string;
   likes: number; 
   report_count: number;
 };
 
-// ================= Icon 库 =================
+// ================= Icon 库 (保持不变) =================
 function StarIcon({ filled, size, color = "#FACC15" }: { filled: boolean; size: number; color?: string }) {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill={filled ? color : "#E5E7EB"} style={{ minWidth: size }} className="transition-colors duration-300">
@@ -96,7 +97,7 @@ export default function ReviewPage() {
   
   // 🌟 星星打分状态
   const [rating, setRating] = useState(0);
-  const [hoverRating, setHoverRating] = useState(0); // 增加 Hover 预览状态
+  const [hoverRating, setHoverRating] = useState(0);
   
   const [comment, setComment] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -110,6 +111,10 @@ export default function ReviewPage() {
 
   const [likedReviews, setLikedReviews] = useState<number[]>([]);
   const [reportedReviews, setReportedReviews] = useState<number[]>([]);
+
+  // ✨ 新增：独立的翻译状态管理
+  const [showTranslation, setShowTranslation] = useState<Record<number, boolean>>({});
+  const [isTranslating, setIsTranslating] = useState<Record<number, boolean>>({});
 
   const averageRating = reviews.length > 0 
     ? (reviews.reduce((acc, cur) => acc + cur.rating, 0) / reviews.length).toFixed(1) 
@@ -125,9 +130,7 @@ export default function ReviewPage() {
           .eq("email", user.email)
           .single();
         
-        if (data) {
-          setIsVIP(true); 
-        }
+        if (data) setIsVIP(true); 
       }
     }
     checkVIPStatus();
@@ -146,9 +149,7 @@ export default function ReviewPage() {
         const { data: lec } = await supabase.from("lecturers").select("*").eq("id", lecturerId).single();
         if (lec) {
           setLecturer(lec);
-          if (lec.ai_summary) {
-            setSummary(lec.ai_summary);
-          }
+          if (lec.ai_summary) setSummary(lec.ai_summary);
         }
 
         const { data: rev } = await supabase.from("reviews").select("*").eq("lecturer_id", lecturerId).order("created_at", { ascending: false });
@@ -168,8 +169,9 @@ export default function ReviewPage() {
     let error;
 
     if (editingReviewId) {
+      // ✨ 修改：更新留言时，清除原本已翻译的 comment_en 结果，以保持最新一致
       const res = await supabase.from("reviews")
-        .update({ rating, comment })
+        .update({ rating, comment, comment_en: null })
         .eq("id", editingReviewId);
       error = res.error;
     } else {
@@ -181,7 +183,6 @@ export default function ReviewPage() {
 
       if (res.data && res.data.length > 0) {
         setSessionReviewIds(prev => [...prev, res.data[0].id]);
-        
         fetch("/api/telegram", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -209,60 +210,78 @@ export default function ReviewPage() {
     setIsSubmitting(false);
   }
 
+  // ✨ 新增：处理点击翻译按钮的逻辑
+  async function handleTranslateToggle(review: Review) {
+    // 场景 1：如果本地或数据库中已经有翻译结果，直接 Toggle 切换显示状态
+    if (review.comment_en) {
+      setShowTranslation(prev => ({ ...prev, [review.id]: !prev[review.id] }));
+      return;
+    }
+
+    // 场景 2：尚未翻译，发起 API 请求
+    setIsTranslating(prev => ({ ...prev, [review.id]: true }));
+    try {
+      const response = await fetch("/api/translate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: review.comment }),
+      });
+      const data = await response.json();
+      
+      if (!response.ok) throw new Error(data.error || "Translation failed");
+
+      const translatedText = data.translatedText;
+
+      // 1. 更新本地状态，使其即时显示
+      setReviews(prev => prev.map(r => r.id === review.id ? { ...r, comment_en: translatedText } : r));
+      setShowTranslation(prev => ({ ...prev, [review.id]: true }));
+
+      // 2. 异步将结果保存回 Supabase，实现持久化缓存 (不 block UI 渲染)
+      supabase.from("reviews").update({ comment_en: translatedText }).eq("id", review.id)
+        .then(({ error }) => {
+          if (error) console.error("Failed to save translation to Supabase:", error);
+        });
+
+    } catch (error: any) {
+      console.error("Translation Error:", error);
+      alert("Error translating comment: " + error.message);
+    } finally {
+      setIsTranslating(prev => ({ ...prev, [review.id]: false }));
+    }
+  }
+
   async function handleLike(reviewId: number, currentLikes: number) {
     if (likedReviews.includes(reviewId)) return; 
-
     const newLikesCount = (currentLikes || 0) + 1;
-
     setReviews(prev => prev.map(r => r.id === reviewId ? { ...r, likes: newLikesCount } : r));
-    
     const newLikedArray = [...likedReviews, reviewId];
     setLikedReviews(newLikedArray);
     localStorage.setItem("lecturer_liked_reviews", JSON.stringify(newLikedArray));
-
-    const { error } = await supabase
-      .from("reviews")
-      .update({ likes: newLikesCount })
-      .eq("id", reviewId);
-
+    const { error } = await supabase.from("reviews").update({ likes: newLikesCount }).eq("id", reviewId);
     if (error) console.error("Like error:", error);
   }
 
   async function handleReport(review: Review) {
-    if (reportedReviews.includes(review.id)) {
-      return alert("You have already reported this comment. 🚩");
-    }
-
+    if (reportedReviews.includes(review.id)) return alert("You have already reported this comment. 🚩");
     const confirmReport = window.confirm("Are you sure you want to report this comment?\n(Comments receiving 3 reports will be automatically deleted)");
     if (!confirmReport) return;
 
     const newReportCount = (review.report_count || 0) + 1;
-
     if (newReportCount >= 3) {
       const { error } = await supabase.from("reviews").delete().eq("id", review.id);
-      
       if (!error) {
         setReviews(prev => prev.filter(r => r.id !== review.id)); 
         alert("This comment has been removed due to multiple reports. 🛡️");
-      } else {
-        alert("Error removing comment: " + error.message);
-      }
+      } else alert("Error removing comment: " + error.message);
     } else {
-      const { error } = await supabase.from("reviews")
-        .update({ report_count: newReportCount })
-        .eq("id", review.id);
-
+      const { error } = await supabase.from("reviews").update({ report_count: newReportCount }).eq("id", review.id);
       if (!error) {
         setReviews(prev => prev.map(r => r.id === review.id ? { ...r, report_count: newReportCount } : r));
-        
         const newReportedArray = [...reportedReviews, review.id];
         setReportedReviews(newReportedArray);
         localStorage.setItem("lecturer_reported_reviews", JSON.stringify(newReportedArray));
-        
         alert("Report submitted successfully. Thank you! 🙏");
-      } else {
-        alert("Error reporting: " + error.message);
-      }
+      } else alert("Error reporting: " + error.message);
     }
   }
 
@@ -282,10 +301,8 @@ export default function ReviewPage() {
   async function generateSummary() {
     if (reviews.length === 0) return alert("No reviews yet!");
     setIsGenerating(true);
-    
     try {
       const reviewsText = reviews.map(r => r.comment).join(". ");
-      
       const response = await fetch("/api/gemini", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -298,20 +315,12 @@ export default function ReviewPage() {
       });
 
       const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to generate summary");
-      }
-
+      if (!response.ok) throw new Error(data.error || "Failed to generate summary");
       const newSummary = data.summary;
       setSummary(newSummary); 
 
       if (lecturerId) {
-          const { error: saveError } = await supabase
-            .from("lecturers")
-            .update({ ai_summary: newSummary }) 
-            .eq("id", lecturerId);
-            
+          const { error: saveError } = await supabase.from("lecturers").update({ ai_summary: newSummary }).eq("id", lecturerId);
           if (saveError) console.error("Failed to save summary:", saveError);
       }
     } catch (error: any) {
@@ -321,6 +330,7 @@ export default function ReviewPage() {
     setIsGenerating(false);
   }
 
+  // JSON 解析与 Fallback (保持不变)
   let parsedSummary = { en: "", ms: "", zh: "" };
   if (summary) {
     try {
@@ -329,17 +339,14 @@ export default function ReviewPage() {
       parsedSummary = JSON.parse(cleanSummary);
     } catch (error) {
       console.warn("JSON解析警告 (已启动备用方案):", error);
-      
       const extractMatch = (lang: string) => {
         const regex = new RegExp(`"${lang}"\\s*:\\s*"([\\s\\S]*?)"\\s*(?:,|\\}|$)`);
         const match = summary.match(regex);
         return match ? match[1].replace(/\\n/g, "\n").replace(/\\"/g, '"') : "";
       };
-
       const fallbackEn = extractMatch("en");
       const fallbackMs = extractMatch("ms");
       const fallbackZh = extractMatch("zh");
-
       if (fallbackEn || fallbackMs || fallbackZh) {
         parsedSummary = { en: fallbackEn || "", ms: fallbackMs || "", zh: fallbackZh || "" };
       } else {
@@ -369,7 +376,6 @@ export default function ReviewPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-8 flex flex-col items-center overflow-x-hidden pb-24">
-      
       <motion.div initial={{ y: -20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="w-full max-w-6xl mb-8 flex items-center px-2">
         <button 
           onClick={() => router.back()} 
@@ -381,25 +387,13 @@ export default function ReviewPage() {
         <h1 className="flex-1 text-center text-2xl font-extrabold text-blue-900 tracking-tight pr-10">Lecturer Profile</h1>
       </motion.div>
 
-      <motion.div 
-        variants={staggerContainer} 
-        initial="hidden" 
-        animate="show" 
-        className="w-full max-w-6xl flex flex-col lg:flex-row gap-8 items-start px-2"
-      >
+      <motion.div variants={staggerContainer} initial="hidden" animate="show" className="w-full max-w-6xl flex flex-col lg:flex-row gap-8 items-start px-2">
         
-        {/* ==========================================
-            左侧边栏 (名片 + 评分表单) -> 固定悬浮
-        ========================================== */}
+        {/* 左侧边栏 (讲师信息与打分) */}
         <div className="w-full lg:w-[360px] flex flex-col gap-6 lg:sticky lg:top-8 shrink-0">
-          
-          {/* 1. 高级悬浮讲师名片 */}
           <motion.div variants={fadeInUp} className="bg-white rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-gray-100 relative transition-all duration-300 hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] hover:-translate-y-1">
-            
             <div className="h-28 bg-gradient-to-br from-slate-900 via-indigo-900 to-blue-800 rounded-t-[2rem]"></div>
-            
             <div className="px-6 pb-8 relative text-center">
-              
               <div className="absolute -top-14 left-1/2 -translate-x-1/2">
                 <div className="w-24 h-24 bg-white rounded-full p-[3px] shadow-[0_0_20px_rgba(59,130,246,0.15)] relative">
                   <div className="absolute inset-0 rounded-full border-[3px] border-blue-50"></div>
@@ -412,14 +406,11 @@ export default function ReviewPage() {
                   )}
                 </div>
               </div>
-
               <div className="h-12"></div>
-
               <div className="flex flex-col items-center mt-2 px-2">
                 {parsedTitle && <span className="text-sm font-semibold text-blue-600/80 mb-1.5">{parsedTitle}</span>}
                 <h2 className="text-[22px] font-extrabold text-gray-900 leading-tight tracking-tight">{realName}</h2>
               </div>
-              
               <div className="flex justify-center items-center gap-2 mt-4">
                 <div className="flex items-center gap-1.5 bg-yellow-50 px-3 py-1 rounded-full border border-yellow-100">
                   <StarIcon filled={true} size={15} color="#EAB308" />
@@ -429,31 +420,22 @@ export default function ReviewPage() {
                   ({reviews.length} {reviews.length === 1 ? 'review' : 'reviews'})
                 </span>
               </div>
-
               <div className="mt-8 flex flex-col max-w-[260px] mx-auto pl-2 text-left">
-                
-                {/* Office */}
                 <div className="flex items-start gap-4 py-3.5">
                   <OfficeIcon className="w-[18px] h-[18px] text-gray-400 mt-0.5 shrink-0" />
                   <span className="text-[14px] text-gray-600 font-medium leading-snug break-words">{lecturer.office || "-"}</span>
                 </div>
                 <div className="border-b border-gray-100 w-full"></div>
-                
-                {/* Gender */}
                 <div className="flex items-center gap-4 py-3.5">
                   <UserIcon className="w-[18px] h-[18px] text-gray-400 shrink-0" />
                   <span className="text-[14px] text-gray-600 font-medium">{lecturer.gender || "-"}</span>
                 </div>
                 <div className="border-b border-gray-100 w-full"></div>
-                
-                {/* Email */}
                 <div className="flex items-center gap-4 py-3.5">
                   <MailIcon className="w-[18px] h-[18px] text-gray-400 shrink-0" />
                   <span className="text-[14px] text-gray-600 font-medium truncate">{lecturer.email || "-"}</span>
                 </div>
                 <div className="border-b border-gray-100 w-full"></div>
-                
-                {/* Phone */}
                 <div className="flex items-center gap-4 py-3.5">
                   <PhoneIcon className="w-[18px] h-[18px] text-gray-400 shrink-0" />
                   <div className="flex items-center gap-2">
@@ -471,35 +453,22 @@ export default function ReviewPage() {
                     )}
                   </div>
                 </div>
-
               </div>
             </div>
           </motion.div>
 
-          {/* 3. Review Form */}
           <motion.div ref={formRef} variants={fadeInUp} className="bg-white p-6 rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-gray-100 hover:-translate-y-1 hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] transition-all duration-300">
             <h3 className="text-xl font-extrabold text-gray-900 mb-6 text-center">
               {editingReviewId ? "Edit Your Review" : "Review this Lecturer"}
             </h3>
-            
-            {/* 🌟 星星打分区域：加入高级悬浮发光效果与 Hover 填充动效 */}
             <div className="flex justify-center gap-3 mb-6 p-1">
               {[1, 2, 3, 4, 5].map((s) => {
                 const isActive = s <= (hoverRating || rating);
                 return (
                   <motion.button 
-                    key={s} 
-                    onClick={() => setRating(s)} 
-                    onMouseEnter={() => setHoverRating(s)}
-                    onMouseLeave={() => setHoverRating(0)}
-                    type="button" 
-                    className="relative outline-none rounded-full"
-                    animate={{ scale: isActive ? 1.15 : 1 }}
-                    whileHover={{ scale: 1.25 }}
-                    whileTap={{ scale: 0.9 }}
-                    transition={{ type: "spring", stiffness: 300, damping: 20 }}
+                    key={s} onClick={() => setRating(s)} onMouseEnter={() => setHoverRating(s)} onMouseLeave={() => setHoverRating(0)} type="button" className="relative outline-none rounded-full"
+                    animate={{ scale: isActive ? 1.15 : 1 }} whileHover={{ scale: 1.25 }} whileTap={{ scale: 0.9 }} transition={{ type: "spring", stiffness: 300, damping: 20 }}
                   >
-                    {/* SVG 使用 drop-shadow 滤镜，让星星完美贴合发光 */}
                     <div className={`transition-all duration-300 ${isActive ? 'drop-shadow-[0_0_10px_rgba(250,204,21,0.6)]' : 'drop-shadow-none'}`}>
                       <StarIcon filled={isActive} size={36} color="#FACC15" />
                     </div>
@@ -507,58 +476,39 @@ export default function ReviewPage() {
                 );
               })}
             </div>
-            
             <textarea
               className="w-full p-4.5 border border-gray-200 rounded-2xl bg-white focus:outline-none focus:ring-2 focus:ring-blue-400/50 mb-5 text-sm resize-none shadow-inner leading-relaxed transition-all"
-              rows={4}
-              placeholder="How is their teaching style? Are they helpful?"
-              value={comment}
-              onChange={(e) => setComment(e.target.value)}
+              rows={4} placeholder="How is their teaching style? Are they helpful?" value={comment} onChange={(e) => setComment(e.target.value)}
             />
             <button onClick={handleSubmit} disabled={isSubmitting} className="w-full py-3.5 bg-gray-900 text-white font-bold rounded-2xl shadow-[0_4px_14px_rgba(0,0,0,0.1)] hover:shadow-[0_6px_20px_rgba(0,0,0,0.15)] hover:-translate-y-0.5 hover:bg-gray-800 transition-all duration-300">
               {isSubmitting ? "Saving..." : (editingReviewId ? "Update Review" : "Submit Review")}
             </button>
-            
             {editingReviewId && (
-              <button 
-                onClick={cancelEdit} 
-                disabled={isSubmitting} 
-                className="w-full mt-3 py-3.5 bg-white text-gray-500 font-bold rounded-2xl border border-gray-200 shadow-sm hover:bg-gray-50 hover:text-gray-800 transition-colors"
-              >
+              <button onClick={cancelEdit} disabled={isSubmitting} className="w-full mt-3 py-3.5 bg-white text-gray-500 font-bold rounded-2xl border border-gray-200 shadow-sm hover:bg-gray-50 hover:text-gray-800 transition-colors">
                 Cancel Edit
               </button>
             )}
           </motion.div>
         </div>
 
-        {/* ==========================================
-            右侧主内容区 (AI Summary + 评价列表)
-        ========================================== */}
+        {/* 右侧主内容区 (AI Summary + 评价列表) */}
         <div className="flex-1 w-full flex flex-col gap-6 min-w-0">
-          
-          {/* 2. AI Summary */}
           <motion.div variants={fadeInUp}>
             {!summary ? (
-              <button 
-                onClick={generateSummary}
-                disabled={isGenerating || reviews.length === 0}
-                className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-5 rounded-[2rem] font-bold shadow-[0_4px_14px_0_rgba(79,70,229,0.3)] hover:shadow-lg hover:-translate-y-1 disabled:opacity-50 disabled:hover:translate-y-0 transition-all flex justify-center items-center gap-2 text-base duration-300"
-              >
+              <button onClick={generateSummary} disabled={isGenerating || reviews.length === 0} className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-5 rounded-[2rem] font-bold shadow-[0_4px_14px_0_rgba(79,70,229,0.3)] hover:shadow-lg hover:-translate-y-1 disabled:opacity-50 disabled:hover:translate-y-0 transition-all flex justify-center items-center gap-2 text-base duration-300">
                 {isGenerating ? "AI is Analyzing..." : <><span>✨</span> Generate AI Summary</>}
               </button>
             ) : (
               <div className="bg-[#F8FAFC] p-6 rounded-[2rem] border border-indigo-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] relative overflow-hidden hover:-translate-y-1 hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] transition-all duration-300">
                 <div className="flex justify-between items-center mb-6 relative z-10">
                   <h3 className="text-[#312E81] font-black text-xl flex items-center gap-2">
-                    <motion.span animate={{ rotate: [0, 10, -10, 0], scale: [1, 1.1, 1] }} transition={{ repeat: Infinity, duration: 2.5, ease: "easeInOut" }} className="inline-block">✨</motion.span> 
-                    Lecturer Summary
+                    <motion.span animate={{ rotate: [0, 10, -10, 0], scale: [1, 1.1, 1] }} transition={{ repeat: Infinity, duration: 2.5, ease: "easeInOut" }} className="inline-block">✨</motion.span> Lecturer Summary
                   </h3>
                   <div className="flex items-center gap-1.5 bg-white px-3 py-1.5 rounded-full border border-indigo-100 shadow-sm">
                     <span className="w-2 h-2 bg-indigo-500 rounded-full animate-pulse"></span>
                     <span className="text-[10px] font-bold text-indigo-600 tracking-wider">AI GENERATED</span>
                   </div>
                 </div>
-
                 <div className="space-y-4 relative z-10">
                   {parsedSummary.en && (
                     <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-inner">
@@ -588,7 +538,6 @@ export default function ReviewPage() {
             )}
           </motion.div>
 
-          {/* 4. Feedback List */}
           <motion.div variants={fadeInUp} className="w-full space-y-5 mt-2">
             <div className="flex items-center gap-3 mb-2 px-2">
                <h3 className="text-2xl font-extrabold text-gray-900">Student Feedback</h3>
@@ -611,10 +560,16 @@ export default function ReviewPage() {
                   const currentLikes = review.likes || 0;
                   const isReported = reportedReviews.includes(review.id);
                   
+                  // 判断当前是否处于展示翻译状态
+                  const isShowingTranslation = showTranslation[review.id];
+                  // 展示的文本内容
+                  const displayComment = isShowingTranslation && review.comment_en 
+                    ? review.comment_en 
+                    : review.comment || "No comment provided.";
+                  
                   return (
                     <motion.div 
-                      key={i} 
-                      variants={fadeInUp} 
+                      key={i} variants={fadeInUp} 
                       className={`bg-white p-6 rounded-[2rem] shadow-[0_4px_20px_rgb(0,0,0,0.03)] border ${editingReviewId === review.id ? 'border-blue-400 shadow-md ring-2 ring-blue-50' : 'border-gray-100 hover:-translate-y-1 hover:shadow-[0_8px_30px_rgb(0,0,0,0.06)]'} transition-all duration-300 flex flex-col`}
                     >
                       <div className="flex justify-between items-start mb-5">
@@ -644,10 +599,7 @@ export default function ReviewPage() {
                               <span className="text-[10px] font-medium text-gray-400 hidden sm:block">
                                 * Editable before refresh
                               </span>
-                              <button 
-                                onClick={() => handleEditClick(review)}
-                                className="text-xs font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition-colors border border-blue-100"
-                              >
+                              <button onClick={() => handleEditClick(review)} className="text-xs font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition-colors border border-blue-100">
                                 Edit
                               </button>
                             </div>
@@ -656,49 +608,54 @@ export default function ReviewPage() {
                       </div>
 
                       <div className="bg-gray-50/80 p-5 rounded-2xl border border-gray-100 flex-grow shadow-inner">
+                        {/* 留言内容展示 */}
                         <p className="text-gray-700 text-[15px] leading-relaxed whitespace-pre-line">
-                          {review.comment || "No comment provided."}
+                          {displayComment}
                         </p>
+
+                        {/* ✨ 新增：独立的 Translate to English 按钮 */}
+                        {review.comment && (
+                          <div className="mt-3 flex justify-end">
+                            <button
+                              onClick={() => handleTranslateToggle(review)}
+                              disabled={isTranslating[review.id]}
+                              className="flex items-center gap-1.5 text-xs font-semibold text-blue-500 hover:text-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              <span className="text-sm">🌐</span>
+                              {isTranslating[review.id] 
+                                ? "Translating..." 
+                                : (isShowingTranslation 
+                                    ? "Show Original" 
+                                    : (review.comment_en ? "Show Translation" : "Translate to English"))}
+                            </button>
+                          </div>
+                        )}
                       </div>
 
                       <div className="flex justify-end items-center mt-4 gap-3">
                         <button 
-                          onClick={() => handleReport(review)}
-                          disabled={isReported}
-                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all duration-300 ${
-                            isReported 
-                              ? "bg-red-50 text-red-400 border border-red-100 cursor-default" 
-                              : "bg-white text-gray-400 border border-gray-200 hover:bg-red-50 hover:text-red-500 hover:border-red-200 shadow-sm"
-                          }`}
+                          onClick={() => handleReport(review)} disabled={isReported}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all duration-300 ${isReported ? "bg-red-50 text-red-400 border border-red-100 cursor-default" : "bg-white text-gray-400 border border-gray-200 hover:bg-red-50 hover:text-red-500 hover:border-red-200 shadow-sm"}`}
                         >
                           <FlagIcon className="w-3.5 h-3.5" />
                           <span>{isReported ? "Reported" : "Report"}</span>
                         </button>
-
                         <button 
-                          onClick={() => handleLike(review.id, currentLikes)}
-                          disabled={isLiked}
-                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all duration-300 ${
-                            isLiked 
-                              ? "bg-blue-50 text-blue-600 border border-blue-100 cursor-default" 
-                              : "bg-white text-gray-400 border border-gray-200 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 shadow-sm"
-                          }`}
+                          onClick={() => handleLike(review.id, currentLikes)} disabled={isLiked}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all duration-300 ${isLiked ? "bg-blue-50 text-blue-600 border border-blue-100 cursor-default" : "bg-white text-gray-400 border border-gray-200 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 shadow-sm"}`}
                         >
                           <ThumbUpIcon className="w-3.5 h-3.5 mb-0.5" solid={isLiked} />
                           <span>{currentLikes > 0 ? currentLikes : "Like"}</span>
                         </button>
                       </div>
-
                     </motion.div>
                   );
                 })}
               </motion.div>
             )}
           </motion.div>
-
         </div>
       </motion.div>
-
     </div>
   );
 }
