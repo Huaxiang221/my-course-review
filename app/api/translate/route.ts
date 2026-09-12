@@ -9,39 +9,43 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Text is required" }, { status: 400 });
     }
 
-    // 假设你使用之前生成 Summary 的 GEMINI_API_KEY
-    const apiKey = process.env.GEMINI_API_KEY;
+    const apiKey = process.env.GROQ_API_KEY;
     if (!apiKey) {
-      return NextResponse.json({ error: "API key is missing" }, { status: 500 });
+      return NextResponse.json({ error: "GROQ_API_KEY is missing" }, { status: 500 });
     }
 
-    // 调用 Gemini API 进行翻译
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${apiKey}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [
-                {
-                  text: `Translate the following text into English. If it is already in English, just return the original text. Do not include any extra explanations or quotes, ONLY return the translated text:\n\n${text}`,
-                },
-              ],
-            },
-          ],
-        }),
-      }
-    );
+    // 调用 Groq API 进行翻译（使用极速轻量模型 llama-3.1-8b-instant）
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "qwen/qwen3.8-27b",
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are a translator. Translate the given text into natural English. If the text is already in English, return the original text directly. Do not include quotes, markdown formatting, or any extra explanation.",
+          },
+          {
+            role: "user",
+            content: text,
+          },
+        ],
+        temperature: 0.2,
+      }),
+    });
 
     const data = await response.json();
 
     if (!response.ok) {
-      throw new Error(data.error?.message || "Translation API failed");
+      throw new Error(data.error?.message || "Groq Translation API failed");
     }
 
-    const translatedText = data.candidates[0].content.parts[0].text.trim();
+    // OpenAI 格式的返回内容在 choices[0].message.content
+    const translatedText = data.choices[0]?.message?.content?.trim() || text;
 
     return NextResponse.json({ translatedText });
   } catch (error: any) {
